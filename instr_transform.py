@@ -80,3 +80,8 @@ instrTransform = {
 	"ret" : trans_ret,
 	"icmp_slt" : trans_icmp_slt,
 }
+
+#subroutine
+def sr_mult():
+	
+

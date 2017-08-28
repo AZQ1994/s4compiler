@@ -84,3 +84,17 @@ class Memory:
 	def temp_over(self, name):
 		self.tempAvailable.append(name)
 		self.tempDict[name] = False
+
+
+class Word:
+	def __init__(self):
+		self.type
+		self.name
+		self.value
+		
+
+"""
+
+
+
+"""

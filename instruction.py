@@ -23,3 +23,7 @@ class Instruction:
 		if hasattr(self, 'str'):
 			return self.str
 		return "[Instruction: " + self.instrStr + "(" + ",".join(self.params)+ ")]"
+class Subneg4Instruction(Instruction):
+	pass
+
+class SystemInstruction(Instruction):
