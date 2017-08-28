@@ -1,0 +1,43 @@
+# Successfully read Module:
+# Name: python/test/test_code_01/plus.bc
+# Target triple: x86_64-unknown-linux-gnu
+[Function:plus](a ){
+    [BasicBlock](entry){
+        [Instruction](0x29e4ab8) : alloca	: var(a.addr), /*=*/ int(1)
+        [Instruction](0x29e4a48) : alloca	: var(res), /*=*/ int(1)
+        [Instruction](0x29e4bf8) : alloca	: var(i), /*=*/ int(1)
+        [Instruction](0x29e4c80) : store	: var(a), var(a.addr)
+        [Instruction](0x29e44a0) : store	: int(0), var(res)
+        [Instruction](0x29e4520) : store	: int(0), var(i)
+        [Instruction](0x29e60e8) : br	: var(for.cond)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond){
+        [Instruction](0x29e4588) : load	: ptr(0x29e4588), var(i)
+        [Instruction](0x29e45e8) : load	: ptr(0x29e45e8), var(a.addr)
+        [Instruction](0x29e4b40) : icmp_slt	: var(cmp), /*=*/ ptr(0x29e4588), ptr(0x29e45e8)
+        [Instruction](0x29e4808) : br	: var(cmp), var(for.end), var(for.body)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body){
+        [Instruction](0x29e4868) : load	: ptr(0x29e4868), var(i)
+        [Instruction](0x29e10f8) : load	: ptr(0x29e10f8), var(res)
+        [Instruction](0x29e1170) : add	: var(add), /*=*/ ptr(0x29e10f8), ptr(0x29e4868)
+        [Instruction](0x29e11f0) : store	: var(add), var(res)
+        [Instruction](0x29e1258) : br	: var(for.inc)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.inc){
+        [Instruction](0x29e12b8) : load	: ptr(0x29e12b8), var(i)
+        [Instruction](0x29e1330) : add	: var(inc), /*=*/ ptr(0x29e12b8), int(1)
+        [Instruction](0x29e13b0) : store	: var(inc), var(i)
+        [Instruction](0x29e1418) : br	: var(for.cond)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.end){
+        [Instruction](0x29e1478) : load	: ptr(0x29e1478), var(res)
+        [Instruction](0x29e14d8) : ret	: ptr(0x29e1478)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
