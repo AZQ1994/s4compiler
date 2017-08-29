@@ -82,6 +82,11 @@ instrTransform = {
 }
 
 #subroutine
-def sr_mult():
-	
+def sr_mult(LN, Mem, LM):
+	ins1 = Instruction("subneg4",[Mem.const(0), Mem.ptr(LN.ins.params[2]), Mem.ptr("sr_mult1"), Label("NEXT")])
+	ins2 = Instruction("subneg4",[Mem.const(0), Mem.ptr(LN.ins.params[2]), Mem.ptr("sr_mult2"), Label("NEXT")])
+	ins3 = Instruction("subneg4",[Mem.const(0), Mem.ptr("sr_return"), Label("NEXT")])
+	ins4 = Instruction("subneg4",[Mem.const(0), Mem.const(-1), Mem.ptr("sr_mult2"), Label("SR_MULT")])
+	LN1 = LM.new(ListNode(ins1))
+	LN2 = LM.new(ListNode(ins2))
 

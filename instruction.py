@@ -27,3 +27,4 @@ class Subneg4Instruction(Instruction):
 	pass
 
 class SystemInstruction(Instruction):
+	pass
