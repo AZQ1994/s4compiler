@@ -85,16 +85,117 @@ class Memory:
 		self.tempAvailable.append(name)
 		self.tempDict[name] = False
 
-
+# a word in memory
 class Word:
+	# type: ptr, data, symbol(NEXT & HALT)
+	# 
+	def __init__(self, type, value, manager, label = None):
+		self.type = type
+		self.value = value
+		self.label = label
+		# word manager
+		self.manager = manager
+		#self.value
+		if type == "ptr":
+			pass
+		elif type == "data":
+			pass
+
+	def getType(self):
+		return self.type
+	def getName(self):
+		return self.name
+	def getPtr(self):
+		if(self.label==None):
+			raise Error
+		return self.manager.addPtrWord(self.label)
+	def __str__(self):
+		if self.label == None:
+			label = ""
+		else:
+			label = self.label + ": "
+
+		#if self.type == "ptr":
+		return label + str(self.value) #+ "("+self.type+")"
+	def __repr__(self):
+		if self.label == None:
+			label = ""
+		else:
+			label = self.label + ": "
+
+		#if self.type == "ptr":
+		return label + str(self.value) #+ "("+self.type+")"
+
+class WordManager:
+	"""
+	wordPtrDict			
+		-- for pointers to data
+		-- {
+			id(word) : word
+		}
+	wordDataDict		
+	wordSymbolDict		
+	"""
 	def __init__(self):
-		self.type
-		self.name
-		self.value
-		
+		self.wordPtrDict = {}
+		self.wordDataDict = {}
+		self.wordSymbolDict = {
+			"next": Word("symbol", "NEXT", self),
+			"halt": Word("symbol", "HALT", self)
+		}
+		self.labelDict = {}
+		self.flags = {}
+	def addPtrWord(self, value, label=None):
+		word = Word("ptr", value, self, label)
+		self.wordPtrDict[id(word)] = word
+		#print id(word),id(self.wordPtrDict[id(word)])
 
+		return word
+	def getPtrWord(word_id):
+		if self.wordPtrDict.has_key(word_id):
+			return self.wordPtrDict[word_id]
+		else:
+			return None
+	def deletePtrWord(word_id):
+		return self.wordPtrDict.pop(word_id)
+
+	def addDataWord(self, value, label):
+		while self.wordDataDict.has_key(label):
+			label = label + "_1"
+		self.wordDataDict[label] = Word("data", value, self, label)
+		return self.wordDataDict[label]
+	def const(self, value):
+		name = "c_"+str(value).replace("-","m")
+		if name in self.wordDataDict:
+			return self.wordDataDict[name]
+		else:
+			self.wordDataDict[name] = Word("data", value, self, name)
+			return self.wordDataDict[name]
+	def getFlag(self, name):
+		if self.flags.has_key(name):
+			return self.flags[name]
+		else:
+			return None
+	def setFlag(self, name, value):
+		self.flag[name] = value
+	def hasFlag(self, name):
+		return self.flag.has_key(name)
+
+	def getNext(self):
+		return self.wordSymbolDict["next"]
+	def getHalt(self):
+		return self.wordSymbolDict["halt"]
+
+	def label(self, name):
+		l = Word("label", name, self)
+		self.labelDict[id(l)]=l
+		return l
 """
 
 
 
 """
+
+test = WordManager()
+word = test.addPtrWord("abc")
+print id(word)

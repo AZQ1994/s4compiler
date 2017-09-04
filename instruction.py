@@ -24,7 +24,13 @@ class Instruction:
 			return self.str
 		return "[Instruction: " + self.instrStr + "(" + ",".join(self.params)+ ")]"
 class Subneg4Instruction(Instruction):
-	pass
+	def __init__(self, p1, p2, p3, p4):
+		self.params = [p1,p2,p3,p4]
+		self.instrStr = "SBN4"
+	def __repr__(self):
+		#return "/*SBN4*/ "+ str(self.params[0]) + " " + str(self.params[1]) + " " + str(self.params[2]) + " " + str(self.params[3])
+		return str(self.params[0]) + " " + str(self.params[1]) + " " + str(self.params[2]) + " " + str(self.params[3])
+	
 
 class SystemInstruction(Instruction):
 	pass

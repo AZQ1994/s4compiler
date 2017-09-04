@@ -1,6 +1,6 @@
 
 #from instruction import Instruction
-from instr_transform import instrTransform
+from instr_transform import instrTransform, funcDict
 from memory import Memory
 #from memory import Memory2
 #from memory import MemoryNode
