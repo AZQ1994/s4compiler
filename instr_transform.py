@@ -7,6 +7,7 @@ from memory import Word
 #test
 from label import LabelManager
 from memory import WordManager
+from instruction import SystemInstruction
 
 def trans_alloca(LN, Mem, LM):
 	Mem.allocate(LN.ins.params[0], Mem.const2i(LN.ins.params[1]))
@@ -112,7 +113,7 @@ def goto_mult(LN, WM, LM):
 		while lastNode.next != None:
 			lastNode = lastNode.next
 		nodes, arg1, arg2, ret_addr, res = sr_mult(WM, LM)
-		lastNode.append(nodes)
+		lastNode.prev.appendLNs(nodes)
 		WM.setFlag("sr_mult", (arg1, arg2, ret_addr, res))
 
 
@@ -125,13 +126,50 @@ def goto_mult(LN, WM, LM):
 	res = res_mult
 	"""
 	NEXT = WM.getNext()
-	pre_LNs = (
+	#multAddress = WM.addDataWord(WM.label("sr_mult_start"),"sr_mult_addr")
+	c_0 = WM.const(0)
+	c_m1 = WM.const(-1)
+	after_LNs = [
 		LM.new(ListNode(Subneg4Instruction(
 			# 
-			
+			c_0.getPtr(),
+			res.getPtr(),
+			LN.ins.res.getPtr(),
+			NEXT
 		))),
-
-	)
+	]
+	backAddress = WM.addDataWord(WM.label(after_LNs[0].label),"backAddress")
+	pre_LNs = [
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			LN.ins.param[0].getPtr(),
+			arg1.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			LN.ins.param[1].getPtr(),
+			arg2.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			backAddress.getPtr(),
+			ret_addr.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			c_m1.getPtr(),
+			c_m1.getPtr(),
+			WM.label("sr_mult_start")
+		))),
+	]
+	LN.replaceLNs(LM, pre_LNs+after_LNs)
 
 	
 def sr_mult(WM, LM):
@@ -162,7 +200,7 @@ def sr_mult(WM, LM):
 			a.getPtr(), 
 			temp.getPtr(), 
 			WM.label("sr_mult_L010")
-		))),
+		)), "sr_mult_start"),
 		LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(), 
 			c_0.getPtr(), 
@@ -395,9 +433,21 @@ WM.label("sr_mult_L030")
 
 LM = LabelManager()
 WM = WordManager()
-nodes, arg1, arg2, ret_addr, res = sr_mult(WM, LM)
-for n in nodes:
+start = ListNode("start", sys = True)
+endNode = ListNode("end", sys = True)
+LN = LM.new(ListNode(SystemInstruction("pseudo",[WM.addDataWord(100,"test_1"),WM.addDataWord(200,"test_2")],WM.addDataWord(200,"test_res"))))
+start.setNext(LN)
+LN.setNext(endNode)
+goto_mult(LN, WM, LM)
+
+n = start
+while n != None:
 	print n
+	n = n.next
+
+#nodes, arg1, arg2, ret_addr, res = sr_mult(WM, LM)
+#for n in nodes:
+#	print n
 #print arg1
 #print arg2
 #print ret_addr

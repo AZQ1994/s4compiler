@@ -33,4 +33,8 @@ class Subneg4Instruction(Instruction):
 	
 
 class SystemInstruction(Instruction):
+	def __init__(self, name, param, res):
+		self.name = name
+		self.param = param
+		self.res = res
 	pass

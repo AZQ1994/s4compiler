@@ -145,6 +145,7 @@ class WordManager:
 		}
 		self.labelDict = {}
 		self.flags = {}
+		self.addrDict = {} # same to word data
 	def addPtrWord(self, value, label=None):
 		word = Word("ptr", value, self, label)
 		self.wordPtrDict[id(word)] = word
@@ -163,6 +164,8 @@ class WordManager:
 		while self.wordDataDict.has_key(label):
 			label = label + "_1"
 		self.wordDataDict[label] = Word("data", value, self, label)
+		if type(value) == Word:
+			self.addrDict[label] = value
 		return self.wordDataDict[label]
 	def const(self, value):
 		name = "c_"+str(value).replace("-","m")
@@ -177,9 +180,9 @@ class WordManager:
 		else:
 			return None
 	def setFlag(self, name, value):
-		self.flag[name] = value
+		self.flags[name] = value
 	def hasFlag(self, name):
-		return self.flag.has_key(name)
+		return self.flags.has_key(name)
 
 	def getNext(self):
 		return self.wordSymbolDict["next"]
@@ -190,6 +193,8 @@ class WordManager:
 		l = Word("label", name, self)
 		self.labelDict[id(l)]=l
 		return l
+
+
 """
 
 

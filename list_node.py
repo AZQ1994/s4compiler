@@ -15,6 +15,18 @@ class ListNode:
 		LN.next = self
 		return self
 
+	def appendLNs(self, LNs):
+		#print LNs
+		temp = self.next
+		current = self
+		for LN in LNs:
+			current.next = LN
+			LN.prev = current
+			current = LN
+		current.next = temp
+		temp.prev = current
+		return current
+
 	def append(self, *LNs):
 		temp = self.next
 		current = self
@@ -25,6 +37,20 @@ class ListNode:
 		current.next = temp
 		temp.prev = current
 		return current
+	def replaceLNs(self, LM, LNs):
+		temp = self.next
+		current = self.prev
+		LNs[0].label = self.label
+
+		for LN in LNs:
+			current.next = LN
+			LN.prev = current
+			current = LN
+		current.next = temp
+		temp.prev = current
+		his = self.prev.next
+		del self
+		return his
 	def replace(self, LM, *LNs):
 		temp = self.next
 		current = self.prev
