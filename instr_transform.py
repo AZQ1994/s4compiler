@@ -101,7 +101,50 @@ funcDict = {
 	"icmp_slt" : trans_icmp_slt,
 }
 
+def stack_push(LN, WM, LM):
+	if WM.hasFlag("sr_stack_push"):
+		arg1, ret_addr = WM.getFlag("sr_stack_push")
+	else:
+		lastNode = LN
+		while lastNode.next != None:
+			lastNode = lastNode.next
+		nodes, arg1, arg2, ret_addr, res = sr_mult(WM, LM)
+		lastNode.prev.appendLNs(nodes)
+		WM.setFlag("sr_stack_push", (arg1, ret_addr, res))
+def stack_init(WM):
+	if WM.hasFlag("stack_init"):
+		return
+	#WM.
+"""
+首先，stack初始化的时候
+要先把变量做出来，
+但这个变量是特殊的
+其实可以用WM去做吧
 
+
+"""
+
+def stack_pop(LN, WM, LM):
+	pass
+def sr_stack_push():
+	c_0 = WM.const(0)
+	c_1 = WM.const(1)
+	c_m1 = WM.const(-1)
+
+	if WM.hasFlag("stack_pointer"):
+
+
+	ret_addr = WM.addDataWord(0, "stack_push_ret_addr")
+
+
+	pass
+def sr_stack_pop():
+	c_0 = WM.const(0)
+	c_1 = WM.const(1)
+	c_m1 = WM.const(-1)
+
+	ret_addr = WM.addDataWord(0, "stack_pop_ret_addr")
+	pass
 #subroutine
 def goto_mult(LN, WM, LM):
 	
