@@ -1,3 +1,5 @@
+# coding=UTF-8
+
 from instruction import Instruction, Subneg4Instruction
 from list_node import ListNode
 from label import Label
@@ -79,27 +81,7 @@ def trans_icmp_slt(LN, Mem, LM):
 
 
 
-instrTransform = {
-	"alloca" : trans_alloca,
-	"add" : trans_add,
-	"load" : trans_load,
-	"store" : trans_store,
-	"br" : trans_br,
-	"ret" : trans_ret,
-	"icmp_slt" : trans_icmp_slt,
-}
 
-
-
-funcDict = {
-	"alloca" : trans_alloca,
-	"add" : trans_add,
-	"load" : trans_load,
-	"store" : trans_store,
-	"br" : trans_br,
-	"ret" : trans_ret,
-	"icmp_slt" : trans_icmp_slt,
-}
 
 def stack_push(LN, WM, LM):
 	if WM.hasFlag("sr_stack_push"):
@@ -122,6 +104,29 @@ def stack_init(WM):
 其实可以用WM去做吧
 
 
+stack使用
+
+call
+函数被call之后需要将正在执行的函数的需要备份的变量一次push到stack里面
+并把相应的返回地址（需要把地址存在内存里）带入到相应函数的位置
+然后把带入的数据放入被呼出的函数的相应变量的位置，
+执行函数
+
+
+goto_addr, arg ret_addr
+push(var)
+backaddress
+
+0, var, arg1, goto_addr
+L_backaddress:
+
+-1, pointer, pointer, NEXT
+0, pointer, WRITE, NEXT
+0, arg1, WRITE: 0, NEXT
+-1, 0, 
+
+
+
 """
 
 def stack_pop(LN, WM, LM):
@@ -132,12 +137,8 @@ def sr_stack_push():
 	c_m1 = WM.const(-1)
 
 	if WM.hasFlag("stack_pointer"):
-
-
+		pass
 	ret_addr = WM.addDataWord(0, "stack_push_ret_addr")
-
-
-	pass
 def sr_stack_pop():
 	c_0 = WM.const(0)
 	c_1 = WM.const(1)
@@ -474,6 +475,49 @@ WM.label("sr_mult_L030")
 
 """
 
+
+
+
+
+
+
+instrTransform = {
+	"alloca" : trans_alloca,
+	"add" : trans_add,
+	"load" : trans_load,
+	"store" : trans_store,
+	"br" : trans_br,
+	"ret" : trans_ret,
+	"icmp_slt" : trans_icmp_slt,
+	"mul" : goto_mult,
+}
+
+
+
+funcDict = {
+	"alloca" : trans_alloca,
+	"add" : trans_add,
+	"load" : trans_load,
+	"store" : trans_store,
+	"br" : trans_br,
+	"ret" : trans_ret,
+	"icmp_slt" : trans_icmp_slt,
+	"mul" : goto_mult,
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 LM = LabelManager()
 WM = WordManager()
 start = ListNode("start", sys = True)
@@ -498,3 +542,9 @@ while n != None:
 
 for key, value in WM.wordDataDict.items():
 	print value
+
+
+
+
+
+

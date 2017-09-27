@@ -87,7 +87,7 @@ class analyze:
 
 
 
-p = CodeParser("test/test_code_01/plus.parse")
+p = CodeParser("test/test_code_03/mult.o2.parse")
 
 p.parse()
 p.printModule()

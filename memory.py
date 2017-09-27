@@ -146,6 +146,9 @@ class WordManager:
 		self.labelDict = {}
 		self.flags = {}
 		self.addrDict = {} # same to word data
+		self.stack = {
+			#"stack_pointer" : self.addDataWord("stack_pointer"),
+		}
 	def addPtrWord(self, value, label=None):
 		word = Word("ptr", value, self, label)
 		self.wordPtrDict[id(word)] = word
@@ -193,6 +196,15 @@ class WordManager:
 		l = Word("label", name, self)
 		self.labelDict[id(l)]=l
 		return l
+
+	def dataMem(self):
+		for key, value in WM.wordDataDict.items():
+			print value
+		if(self.hasFlag("stack")):
+			pass
+		
+
+
 
 
 """
