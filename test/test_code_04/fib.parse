@@ -1,0 +1,32 @@
+# Successfully read Module:
+# Name: s4compiler/test/test_code_04/fib.bc
+# Target triple: x86_64-unknown-linux-gnu
+[Function:fib](a ){
+    [BasicBlock](entry){
+        [Instruction](0x1137110) : icmp_ult	: var(switch), /*=*/ var(a), int(2)
+        [Instruction](0x11371a8) : br	: var(switch), var(sw.default), var(return)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](sw.default){
+        [Instruction](0x1137220) : add	: var(sub), /*=*/ var(a), int(-2)
+        [Instruction](0x11372a0) : call	: var(call), /*=*/ var(sub), var(fib)
+        [Instruction](0x11374c0) : add	: var(sub2), /*=*/ var(a), int(-1)
+        [Instruction](0x113c000) : call	: var(call3), /*=*/ var(sub2), var(fib)
+        [Instruction](0x113c090) : add	: var(add), /*=*/ var(call3), var(call)
+        [Instruction](0x1137528) : ret	: var(add)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](return){
+        [Instruction](0x113c6e8) : ret	: var(a)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
+[Function:main](){
+    [BasicBlock](entry){
+        [Instruction](0x113c9e0) : call	: var(call), /*=*/ int(10), var(fib)
+        [Instruction](0x113ca58) : ret	: var(call)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
