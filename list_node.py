@@ -1,10 +1,12 @@
 class ListNode:
-	def __init__(self, ins, label = None, sys = False):
+	def __init__(self, ins, label = None, sys = False, opt = None):
 		self.ins = ins
 		self.next = None
 		self.prev = None
 		self.sys = sys
 		self.label = label
+		self.opt = opt
+		
 	def setNext(self, LN):
 		self.next = LN
 		LN.prev = self

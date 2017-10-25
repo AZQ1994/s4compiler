@@ -3,21 +3,23 @@ from instruction import Instruction, Subneg4Instruction
 
 
 def sr_mult(WM, LM):
+	namespace_bak = WM.getNamespace(string=False)
+	WM.setNamespace(["sr","mult"])
 	c_0 = WM.const(0)
 	c_1 = WM.const(1)
 	c_m1 = WM.const(-1)
 	c_32 = WM.const(32)
 
-	a = WM.addDataWord(0, "mult_arg1")
-	b = WM.addDataWord(0, "mult_arg2")
-	ret_addr = WM.addDataWord(0, "mult_ret_addr")
+	a = WM.addDataWord(0, "arg1")
+	b = WM.addDataWord(0, "arg2")
+	ret_addr = WM.addDataWord(0, "ret_addr")
 
-	temp = WM.addDataWord(0, "mult_temp")
+	temp = WM.addDataWord(0, "temp")
 
-	count = WM.addDataWord(0, "mult_count")
-	hi = WM.addDataWord(0, "mult_hi")
-	lo = WM.addDataWord(0, "mult_lo")
-	sign = WM.addDataWord(0, "mult_sign")
+	count = WM.addDataWord(0, "count")
+	hi = WM.addDataWord(0, "hi")
+	lo = WM.addDataWord(0, "lo")
+	sign = WM.addDataWord(0, "sign")
 
 	NEXT = WM.getNext()
 	#HALT = WM.getHalt()
@@ -242,4 +244,6 @@ def sr_mult(WM, LM):
 			ret_addr
 		)))
 	)
+
+	WM.setNamespace(namespace_bak)
 	return LNs, a, b, ret_addr, lo

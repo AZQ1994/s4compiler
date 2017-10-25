@@ -86,7 +86,7 @@ class Memory:
 		self.tempDict[name] = False
 
 # a word in memory
-class Word:
+class Word(object):
 	# type: ptr, data, symbol(NEXT & HALT)
 	# 
 	def __init__(self, type, value, manager, label = None):
@@ -103,8 +103,8 @@ class Word:
 
 	def getType(self):
 		return self.type
-	def getName(self):
-		return self.name
+	#def getName(self):
+	#	return self.name
 	def getPtr(self):
 		if(self.label==None):
 			raise Error
@@ -116,6 +116,8 @@ class Word:
 			label = self.label + ": "
 
 		#if self.type == "ptr":
+		if type(self.value) is Word and self.value.type == "label":
+			return label + "&" + str(self.value)
 		return label + str(self.value) #+ "("+self.type+")"
 	def __repr__(self):
 		if self.label == None:
@@ -124,6 +126,8 @@ class Word:
 			label = self.label + ": "
 
 		#if self.type == "ptr":
+		if type(self.value) is Word and self.value.type == "label":
+			return label + "&" + str(self.value)
 		return label + str(self.value) #+ "("+self.type+")"
 
 class WordManager:
@@ -149,6 +153,44 @@ class WordManager:
 		self.stack = {
 			#"stack_pointer" : self.addDataWord("stack_pointer"),
 		}
+		self.nameToWord = {}
+		self.temp = {}
+		self.namespace = []
+	def setNamespace(self, namespace):
+		self.namespace = namespace
+	def getNamespace(self, string=True):
+		if string:
+			return "_".join(self.namespace+[""])
+		else:
+			return self.namespace
+	def pushNamespace(self, name):
+		self.namespace.append(name)
+		return self.getNamespace()
+	def popNamespace(self):
+		return self.namespace.pop()
+	def getTemp(self, name):
+		name = self.getNamespace() + str(name)
+		if self.temp.has_key(name):
+			return self.temp[name]
+		else:
+			self.temp[name] = self.addDataWord(0, "t_"+name, False)
+			return self.temp[name]
+	def addName(self, word, name):
+		#name = self.getNamespace() + name
+		self.nameToWord[name] = word
+		return word
+	def addNewName(self, name):
+		word = self.addDataWord(0, name)
+		self.addName(word, name)
+		return word
+	def getName(self, name):
+		if self.nameToWord.has_key(name):
+			return self.nameToWord[name]
+		else:
+			word = self.addDataWord(0, name)
+			self.addName(word, name)
+			return word
+
 	def addPtrWord(self, value, label=None):
 		word = Word("ptr", value, self, label)
 		self.wordPtrDict[id(word)] = word
@@ -163,20 +205,27 @@ class WordManager:
 	def deletePtrWord(word_id):
 		return self.wordPtrDict.pop(word_id)
 
-	def addDataWord(self, value, label):
+	def addDataWord(self, value, label, namespace=True):
+		if namespace:
+			label = self.getNamespace() + label
 		while self.wordDataDict.has_key(label):
-			label = label + "_1"
+			label = label + "-1"
 		self.wordDataDict[label] = Word("data", value, self, label)
 		if type(value) == Word:
 			self.addrDict[label] = value
 		return self.wordDataDict[label]
+	def deleteDataWord(self, word):
+		if self.wordDataDict.has_key(word.label):
+			return self.wordDataDict.pop(word.label)
 	def const(self, value):
 		name = "c_"+str(value).replace("-","m")
 		if name in self.wordDataDict:
 			return self.wordDataDict[name]
 		else:
-			self.wordDataDict[name] = Word("data", value, self, name)
-			return self.wordDataDict[name]
+			word = Word("data", value, self, name)
+			self.wordDataDict[name] = word
+			self.nameToWord[name] = word
+			return word
 	def getFlag(self, name):
 		if self.flags.has_key(name):
 			return self.flags[name]
@@ -198,7 +247,7 @@ class WordManager:
 		return l
 
 	def dataMem(self):
-		for key, value in WM.wordDataDict.items():
+		for key, value in self.wordDataDict.items():
 			print value
 		if(self.hasFlag("stack")):
 			pass

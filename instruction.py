@@ -22,7 +22,7 @@ class Instruction:
 	def __repr__(self):
 		if hasattr(self, 'str'):
 			return self.str
-		return "[Instruction: " + self.instrStr + "(" + ",".join(self.params)+ ")]"
+		return "[Instruction: " + self.instrStr + "(" + ",".join([str(x) for x in self.params])+ ")]"
 class Subneg4Instruction(Instruction):
 	def __init__(self, p1, p2, p3, p4):
 		self.params = [p1,p2,p3,p4]
@@ -33,8 +33,10 @@ class Subneg4Instruction(Instruction):
 	
 
 class SystemInstruction(Instruction):
+	"""
 	def __init__(self, name, param, res):
 		self.name = name
 		self.param = param
 		self.res = res
+	"""
 	pass

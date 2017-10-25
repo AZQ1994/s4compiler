@@ -10,6 +10,6 @@ class config:
 			#arithmetic
 			"add" : "{0} = {1} + {2}",
 			"subneg4" : "{0}\t{1}\t{2}\t{3}",
-
+			"mul" : "{0} = {1} * {2}",
 			
 		}
