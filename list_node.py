@@ -1,11 +1,13 @@
-class ListNode:
+class ListNode(object):
 	def __init__(self, ins, label = None, sys = False, opt = None):
 		self.ins = ins
 		self.next = None
 		self.prev = None
 		self.sys = sys
-		self.label = label
+		self.label = []
 		self.opt = opt
+		if label != None:
+			self.label.append(label)
 		
 	def setNext(self, LN):
 		self.next = LN
@@ -42,8 +44,15 @@ class ListNode:
 	def replaceLNs(self, LM, LNs):
 		temp = self.next
 		current = self.prev
-		LNs[0].label = self.label
-
+		"""
+		if(self.label!=None):
+			if(LNs[0].label==None):
+				LNs[0].label = self.label
+			else:
+				LNs[0].label = str(self.label) + ":" + str(LNs[0].label)
+		"""
+		#LNs[0].label = self.label
+		LNs[0].label += self.label
 		for LN in LNs:
 			current.next = LN
 			LN.prev = current
@@ -56,8 +65,15 @@ class ListNode:
 	def replace(self, LM, *LNs):
 		temp = self.next
 		current = self.prev
-		LNs[0].label = self.label
-
+		"""
+		if(self.label!=None):
+			if(LNs[0].label==None):
+				LNs[0].label = self.label
+			else:
+				LNs[0].label = str(self.label) + ":" + str(LNs[0].label)
+		"""
+		#LNs[0].label = self.label
+		LNs[0].label += self.label
 		for LN in LNs:
 			current.next = LN
 			LN.prev = current
@@ -71,6 +87,19 @@ class ListNode:
 	def remove(self):
 		self.prev.next = self.next
 		self.next.prev = self.prev
+		self.next.label += self.label
+		#print "test:"+str(self)+":::"+str(self.label)+"::::"+str(self.next.label)
 		del self
+	def label_string(self):
+		if len(self.label) == 0:
+			return None
+		return ":".join([str(x) for x in self.label])
+	def getALabel(self):
+		if len(self.label) != 0:
+			return self.label[0]
+
+	def addLabel(self, label):
+		self.label.append(label)
+		
 	def __repr__(self):
-		return str(self.label) + ":\t" + str(self.ins) if not self.sys else ""
+		return str(self.label_string()) + ":\t" + str(self.ins) if not self.sys else ""

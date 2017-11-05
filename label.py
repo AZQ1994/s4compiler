@@ -4,18 +4,22 @@ class Label:
 	def __repr__(self):
 		return self.name
 
-class LabelManager:
+class LabelManager(object):
 	def __init__(self):
 		self.nameDict = dict()
 		self.label_num = 0
 		self.labelDict = dict()
 	def new(self, LN, name = None):
 		if name != None:
-			if self.hasLabel(name):
-				LN.label = self.getLabel(name)
+			if type(name) is list:
+				pass
 			else:
-				LN.label =self.addLabel(name)
-			
+				name = [name]
+			for n in name:
+				if self.hasLabel(n):
+					LN.addLabel(self.getLabel(n))
+				else:
+					LN.addLabel(self.addLabel(n))
 			return LN
 		self.label_num += 1
 		ID = "L"+str(self.label_num)
@@ -23,12 +27,11 @@ class LabelManager:
 			self.label_num += 1
 			ID = "L"+str(self.label_num)
 		
-		LN.label = self.addLabel(ID)
-
+		LN.addLabel(self.addLabel(ID))
 		return LN
 	def delete(self, name):
 		LN = self.nameDict.pop(str(name))
-		LN.label = None
+		LN.label = []
 	"""def search(self, name):
 		return self.nameDict[str(name)]
 	"""

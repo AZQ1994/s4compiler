@@ -29,14 +29,9 @@ def build_br(ins_params, WM):
 	if len(ins_params)==1:
 		p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[0])
 		if len(p_var) == 1:
-			word = WM.label(p_var[0].replace(".","_"))
+			word = WM.label(WM.getUpperNamespace()+p_var[0].replace(".","_"))
 			params.append(word)
 			return params
-		p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', ins_params[0])
-		if len(p_ptr) == 1:
-			word = WM.label("p_"+p_ptr[0])
-			params.append(word)
-		return params
 	# ins_params[0]
 	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[0])
 	if len(p_var) == 1:
@@ -55,32 +50,67 @@ def build_br(ins_params, WM):
 	# ins_params[1]
 	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[1])
 	if len(p_var) == 1:
-		word = WM.label(p_var[0].replace(".","_"))
-		params.append(word)
-	p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', ins_params[1])
-	if len(p_ptr) == 1:
-		word = WM.label("p_"+p_ptr[0])
+		word = WM.label(WM.getUpperNamespace()+p_var[0].replace(".","_"))
 		params.append(word)
 	# ins_params[2]
 	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[2])
 	if len(p_var) == 1:
-		word = WM.label(p_var[0].replace(".","_"))
-		params.append(word)
-	p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', ins_params[2])
-	if len(p_ptr) == 1:
-		word = WM.label("p_"+p_ptr[0])
+		word = WM.label(WM.getUpperNamespace()+p_var[0].replace(".","_"))
 		params.append(word)
 	return params
+def build_call(ins_params, WM):
+	call_params = []
+	params = []
 
+	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[0])
+	if len(p_var) == 1:
+		word = WM.getName(p_var[0].replace(".","_"))
+		params.append(word)
+	p_int = re.findall(r'int\(([\s\S]*?)\)', ins_params[0])
+	if len(p_int) == 1:
+		word = WM.const(p_int[0])
+		params.append(word)
+	p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', ins_params[0])
+	if len(p_ptr) == 1:
+		word = WM.getName("p_"+p_ptr[0])
+		params.append(word)
 
+	for x in ins_params[1:-1]:
+		p_var = re.findall(r'var\(([\s\S]*?)\)', x)
+		if len(p_var) == 1:
+			word = WM.getName(p_var[0].replace(".","_"))
+			call_params.append(word)
+			#print "test::::::::", word
+			#### TODO : check
+			continue
+		p_int = re.findall(r'int\(([\s\S]*?)\)', x)
+		if len(p_int) == 1:
+			word = WM.const(p_int[0])
+			call_params.append(word)
+			#print "int",p_int[0]
+			continue
+		p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', x)
+		if len(p_ptr) == 1:
+			word = WM.getName("p_"+p_ptr[0])
+			call_params.append(word)
+			continue
+		call_params.append(x)
+	params.append(call_params)
+	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[-1])
+	if len(p_var) == 1:
+		word = WM.label(WM.getUpperNamespace(2)+p_var[0].replace(".","_"))
+		params.append(word)
+
+	return params
 
 build_methods={
-	"br":build_br
+	"br":build_br,
+	"call":build_call,
 }
 
 def trans_alloca(LN, WM, LM):
 	LN.remove()
-	pass
+	return
 	#WM.addName(WM.addDataWord(0, LN.ins.params[0]), LN.ins.params[0])
 	# ??
 	
@@ -96,6 +126,8 @@ def trans_add(LN, WM, LM):
 	param0 = LN.ins.params[0]
 	c_0 = WM.const(0)
 	NEXT = WM.getNext()
+
+	WM.addNeedSave(param0)
 
 	LN1 = LM.new(ListNode(Subneg4Instruction(
 			param1.getPtr(),
@@ -118,6 +150,8 @@ def trans_load(LN, WM, LM):
 	param1 = LN.ins.params[1]
 	param0 = LN.ins.params[0]
 
+	WM.addNeedSave(param0)
+
 	LN1 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
 			param1.getPtr(),
@@ -131,6 +165,8 @@ def trans_store(LN, WM, LM):
 	NEXT = WM.getNext()
 	param1 = LN.ins.params[1]
 	param0 = LN.ins.params[0]
+
+	WM.addNeedSave(param1)
 
 	LN1 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
@@ -155,7 +191,8 @@ def trans_br(LN, WM, LM):
 		)))
 		LN.replace(LM, LN1)
 	elif len(LN.ins.params) == 3:
-
+		# if param0 == 1? goto param2, else goto param1
+		# different with assembly code in llvm ir
 		param0 = LN.ins.params[0]
 		# 0, param0, temp, param1
 		# 0, -1, temp, param2
@@ -163,41 +200,117 @@ def trans_br(LN, WM, LM):
 			c_0.getPtr(),
 			param0.getPtr(),
 			temp.getPtr(),
-			LN.ins.params[2]
+			LN.ins.params[1]
 		)))
 		LN2 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
 			c_m1.getPtr(),
 			temp.getPtr(),
-			LN.ins.params[1] 
+			LN.ins.params[2] 
 		)))
 		LN.replace(LM, LN1, LN2)
+def trans_call(LN, WM, LM):
+	temp = WM.getTemp(0)
+	c_0 = WM.const(0)
+	c_m1 = WM.const(-1)
+
+	backAddress = WM.addDataWord(WM.label(LN.next.getALabel()),"nextLabel")
+
+	stack_node = []
+	for k, v in WM.needSave.items():
+		stack_node.append(LM.new(ListNode(Instruction("",[k]))))
+	LN.appendLNs(stack_node)
+	for x in stack_node:
+		stack_push(x, WM, LM)
+
+	returnData = WM.getName("d_"+str(LN.ins.params[2])+"_returnData")
+
+	LN1 = LM.new(ListNode(Subneg4Instruction(
+		# 0, -1, temp, goto function
+		c_0.getPtr(),
+		c_m1.getPtr(),
+		temp.getPtr(),
+		LN.ins.params[2]
+	)))
+
+	LNs = []
+	print WM.functionInfo
+	if len(WM.functionInfo[str(LN.ins.params[2])]) != len(LN.ins.params[1]):
+		print WM.functionInfo[str(LN.ins.params[2])], LN.ins.params[1]
+		print "!!!!!!! CALL ERROR !!!!!!!!!!!!!"
+		return
+	NEXT = WM.getNext()
+	for arg, param in zip(WM.functionInfo[str(LN.ins.params[2])], LN.ins.params[1]):
+		LNs.append(
+			LM.new(ListNode(Subneg4Instruction(
+				# 0, -1, temp, goto function
+				c_0.getPtr(),
+				param.getPtr(),
+				arg.getPtr(),
+				NEXT
+			)))
+		)
+	LN.replaceLNs(LM, LNs + [LN1])
 
 
 def trans_ret(LN, WM, LM):
+	"""
+20171105 note:
+can't use for to convert listnode of stack to subneg4 instructions
+need to loop the conversion or create another way
+	"""
 	temp = WM.getTemp(0)
 	c_0 = WM.const(0)
 	c_m1 = WM.const(-1)
 	HALT = WM.getHalt()
+	NEXT = WM.getNext()
+	param = LN.ins.params[0]
+
+	backAddress = WM.currentFunction["backAddress"]
+	returnData = WM.currentFunction["returnData"]
+	# stack pop, pop, pop
+	# set back address = stack pop
+	# goto backAddress at last
+	stack_node = []
+	addrPopLN = LM.new(ListNode(Instruction("stack_pop",[backAddress])))
+
+	for k, v in WM.needSave.items()[::-1]:
+		print k,v
+		stack_node.append(LM.new(ListNode(Instruction("stack_pop",[k]))))
+	LN.appendLNs(stack_node).append(addrPopLN)
+	print stack_node
+	for x in stack_node:
+		stack_pop(x, WM, LM)
+	stack_pop(addrPopLN, WM, LM)
+
+	address = WM.addDataPtrWord(0,"returnLabel")
+
 	LN1 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		backAddress.getPtr(),
+		address.getPtr(),
+		NEXT
+	)))
+	LN2 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		param.getPtr(),
+		returnData.getPtr(),
+		NEXT
+	)))
+	LN3 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		temp.getPtr(),
-		HALT
+		address
 	)))
-	LN.replace(LM, LN1)
+	LN.replaceLNs(LM, stack_node+[addrPopLN, LN1, LN2, LN3])
 	#use stack
 	return
-	temp = Mem.temp()
-	ins1 = Instruction("subneg4",[Mem.const(0),Mem.const(-1),temp,Label("HALT")])
-	LN1 = LM.new(ListNode(ins1))
-	Mem.temp_over(temp)
-	LN.replace(LM, LN1)
 
 def trans_icmp_slt(LN, WM, LM):
 	if(LN.next.ins.instrStr=="br" and len(LN.next.ins.params) == 3):
 		pass#LN1 =
-		LM.new(ListNode)
+		#LM.new(ListNode)
 	# if arg1 < arg2 temp = 1
 	# arg1 arg2 temp    temp=arg2-arg1 if temp < 0 arg2 > arg1
 	# 
@@ -278,43 +391,43 @@ def trans_icmp_slt(LN, WM, LM):
 		c_0.getPtr(),
 		c_1.getPtr(),
 		param0.getPtr(),
-		WM.label(LN.next.label)
+		NEXT
 	)))
 	LN3 = LM.new(ListNode(Subneg4Instruction(
 		param2.getPtr(),
 		param1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN5.label)
+		WM.label(LN5.getALabel())
 	)))
 	LN7 = LM.new(ListNode(Subneg4Instruction(#Llt_0
 		c_0.getPtr(),
 		param2.getPtr(),
 		temp.getPtr(),
-		WM.label(LN3.label)
+		WM.label(LN3.getALabel())
 	)))
 	LN6 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN.next.label)
+		WM.label(LN.next.getALabel())
 	)))
 	LN4 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		param0.getPtr(),
-		NEXT
+		WM.label(LN.next.getALabel())
 	)))
 	LN2 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
 		param2.getPtr(),
 		temp.getPtr(),
-		WM.label(LN4.label)
+		WM.label(LN4.getALabel())
 	)))
 	LN1 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
 		param1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN7.label)
+		WM.label(LN7.getALabel())
 	)))
 
 	LN.replace(LM, LN1, LN2, LN3, LN4, LN5, LN6, LN7, LN8)
@@ -334,22 +447,106 @@ def trans_icmp_ult(LN, Mem, LM):
 
 
 
-
-
+def stack_init(WM):
+	if WM.hasFlag("stack_init"):
+		return
+	WM.stack={
+		"size": 100,
+		"start_label": "stack_start"
+	}
+	base = WM.addDataWord(WM.label("stack_start"),"stack_base")
+	pointer = WM.addDataWord(WM.label("stack_start"),"stack_pointer")
+	WM.setFlag("stack_init",(base, pointer))
 def stack_push(LN, WM, LM):
+	c_0 = WM.const(0)
+	c_m1 = WM.const(-1)
+	NEXT = WM.getNext()
 	if WM.hasFlag("sr_stack_push"):
 		arg1, ret_addr = WM.getFlag("sr_stack_push")
 	else:
 		lastNode = LN
 		while lastNode.next != None:
 			lastNode = lastNode.next
-		nodes, arg1, arg2, ret_addr, res = sr_mult(WM, LM)
-		lastNode.prev.appendLNs(nodes)
-		WM.setFlag("sr_stack_push", (arg1, ret_addr, res))
+		nodes, arg1, ret_addr = sr_stack_push(WM, LM)
 
-def stack_init(WM):
-	if WM.hasFlag("stack_init"):
-		return
+		lastNode.prev.appendLNs(nodes)
+		WM.setFlag("sr_stack_push", (arg1, ret_addr))
+	backAddress = WM.addDataWord(WM.label(LN.next.getALabel()),"backAddress")	
+	temp = WM.getTemp(0)
+	pre_LNs = [
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			LN.ins.params[0].getPtr(),
+			arg1.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			backAddress.getPtr(),
+			ret_addr.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			c_m1.getPtr(),
+			temp.getPtr(),
+			WM.label("sr_stack_push_start")
+		))),
+	]
+
+	LN.replaceLNs(LM, pre_LNs)
+	return
+	
+def stack_pop(LN, WM, LM):
+	print "##########",LN
+	c_0 = WM.const(0)
+	c_m1 = WM.const(-1)
+	NEXT = WM.getNext()
+	if WM.hasFlag("sr_stack_pop"):
+		res, ret_addr = WM.getFlag("sr_stack_pop")
+	else:
+		lastNode = LN
+		while lastNode.next != None:
+			lastNode = lastNode.next
+		nodes, res, ret_addr = sr_stack_pop(WM, LM)
+
+		lastNode.prev.appendLNs(nodes)
+		WM.setFlag("sr_stack_pop", (res, ret_addr))	
+	after_LNs = [
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			res.getPtr(),
+			LN.ins.params[0].getPtr(),
+			NEXT
+		))),
+	]
+	backAddress = WM.addDataWord(WM.label(after_LNs[0].getALabel()),"backAddress")
+	temp = WM.getTemp(0)
+	pre_LNs = [
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			backAddress.getPtr(),
+			ret_addr.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 
+			c_0.getPtr(),
+			c_m1.getPtr(),
+			temp.getPtr(),
+			WM.label("sr_stack_pop_start")
+		))),
+	]
+	print pre_LNs+after_LNs
+	LN.replaceLNs(LM, pre_LNs+after_LNs)
+
+
+
 
 
 
@@ -398,26 +595,117 @@ L_backaddress:
 
 """
 
-def stack_pop(LN, WM, LM):
-	pass
-def sr_stack_push():
+
+def sr_stack_push(WM, LM):
+	namespace_bak = WM.getNamespace(string=False)
+	WM.setNamespace(["sr","stack"])
+
 	c_0 = WM.const(0)
 	c_1 = WM.const(1)
 	c_m1 = WM.const(-1)
+	temp = WM.getTemp(0)
+	NEXT = WM.getNext()
 
-	if WM.hasFlag("stack_pointer"):
-		pass
-	ret_addr = WM.addDataWord(0, "stack_push_ret_addr")
-def sr_stack_pop():
+	if not WM.hasFlag("stack_init"):
+		stack_init(WM)
+	base, pointer = WM.getFlag("stack_init")
+	"""
+	-1, p, p ,next
+	0, pointer, WRITE, next
+	0, arg, WRITE:0, next
+	0, -1, temp, L_backaddress
+
+	"""
+
+	ret_addr = WM.addDataPtrWord(0, "sr_stack_push_ret_addr")
+	arg = WM.addDataWord(0, "sr_stack_push_arg")
+	WRITE = WM.addDataPtrWord(0, "sr_stack_push_write")
+
+	nodes = [
+		LM.new(ListNode(Subneg4Instruction(
+			# -1, pointer, pointer, next
+			c_m1.getPtr(),
+			pointer.getPtr(),
+			pointer.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, pointer, write, next
+			c_0.getPtr(),
+			pointer.getPtr(),
+			WRITE.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, arg, write: 0, next
+			c_0.getPtr(),
+			arg.getPtr(),
+			WRITE,
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, -1, temp, backaddress
+			c_0.getPtr(),
+			c_m1.getPtr(),
+			temp.getPtr(),
+			ret_addr
+		))),
+	]
+	WM.setNamespace(namespace_bak)
+	return nodes, arg, ret_addr
+
+def sr_stack_pop(WM, LM):
+	namespace_bak = WM.getNamespace(string=False)
+	WM.setNamespace(["sr","stack"])
+
 	c_0 = WM.const(0)
 	c_1 = WM.const(1)
 	c_m1 = WM.const(-1)
+	temp = WM.getTemp(0)
+	NEXT = WM.getNext()
 
-	ret_addr = WM.addDataWord(0, "stack_pop_ret_addr")
-	pass
+	if not WM.hasFlag("stack_init"):
+		stack_init(WM)
+	base, pointer = WM.getFlag("stack_init")
+
+	ret_addr = WM.addDataPtrWord(0, "stack_pop_ret_addr")
+	res = WM.addDataWord(0, "sr_stack_pop_res")
+	READ = WM.addDataPtrWord(0, "sr_stack_pop_read")
+
+	nodes = [
+		LM.new(ListNode(Subneg4Instruction(
+			# 1, pointer, pointer, next
+			c_1.getPtr(),
+			pointer.getPtr(),
+			pointer.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, pointer, read, next
+			c_0.getPtr(),
+			pointer.getPtr(),
+			READ.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, read:0, res, next
+			c_0.getPtr(),
+			READ,
+			res.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, -1, temp, backaddress
+			c_0.getPtr(),
+			c_m1.getPtr(),
+			temp.getPtr(),
+			ret_addr
+		))),
+	]
+	WM.setNamespace(namespace_bak)
+	return nodes, res, ret_addr
 #subroutine
 def goto_mult(LN, WM, LM):
-	print LN
 
 	if WM.hasFlag("sr_mult"):
 		arg1, arg2, ret_addr = WM.getFlag("sr_mult")
@@ -451,7 +739,8 @@ def goto_mult(LN, WM, LM):
 			NEXT
 		))),
 	]
-	backAddress = WM.addDataWord(WM.label(after_LNs[0].label),"backAddress")
+	backAddress = WM.addDataWord(WM.label(after_LNs[0].getALabel()),"backAddress")
+	temp = WM.getTemp(0)
 	pre_LNs = [
 		LM.new(ListNode(Subneg4Instruction(
 			# 
@@ -478,7 +767,7 @@ def goto_mult(LN, WM, LM):
 			# 
 			c_0.getPtr(),
 			c_m1.getPtr(),
-			c_m1.getPtr(),
+			temp.getPtr(),
 			WM.label("sr_mult_start")
 		))),
 	]
@@ -519,6 +808,7 @@ instrTransform = {
 	"ret" : trans_ret,
 	"icmp_slt" : trans_icmp_slt,
 	"mul" : goto_mult,
+	"call" : trans_call,
 }
 
 
@@ -532,6 +822,7 @@ funcDict = {
 	"ret" : trans_ret,
 	"icmp_slt" : trans_icmp_slt,
 	"mul" : goto_mult,
+	"call" : trans_call,
 }
 
 

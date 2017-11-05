@@ -12,7 +12,7 @@ def sr_mult(WM, LM):
 
 	a = WM.addDataWord(0, "arg1")
 	b = WM.addDataWord(0, "arg2")
-	ret_addr = WM.addDataWord(0, "ret_addr")
+	ret_addr = WM.addDataPtrWord(0, "ret_addr")
 
 	temp = WM.addDataWord(0, "temp")
 
