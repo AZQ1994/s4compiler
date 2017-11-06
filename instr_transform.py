@@ -218,10 +218,10 @@ def trans_call(LN, WM, LM):
 
 	stack_node = []
 	for k, v in WM.needSave.items():
-		stack_node.append(LM.new(ListNode(Instruction("",[k]))))
-	LN.appendLNs(stack_node)
-	for x in stack_node:
-		stack_push(x, WM, LM)
+		stack_node.append(LM.new(ListNode(Instruction("STACK_PUSH",[k]))))
+	#LN.appendLNs(stack_node)
+	#for x in stack_node:
+	#	stack_push(x, WM, LM)
 
 	returnData = WM.getName("d_"+str(LN.ins.params[2])+"_returnData")
 
@@ -250,7 +250,8 @@ def trans_call(LN, WM, LM):
 				NEXT
 			)))
 		)
-	LN.replaceLNs(LM, LNs + [LN1])
+	addrPushLN = LM.new(ListNode(Instruction("STACK_PUSH",[backAddress])))
+	LN.replaceLNs(LM, stack_node + LNs + [LN1,addrPushLN])
 
 
 def trans_ret(LN, WM, LM):
@@ -272,16 +273,16 @@ need to loop the conversion or create another way
 	# set back address = stack pop
 	# goto backAddress at last
 	stack_node = []
-	addrPopLN = LM.new(ListNode(Instruction("stack_pop",[backAddress])))
+	addrPopLN = LM.new(ListNode(Instruction("STACK_POP",[backAddress])))
 
 	for k, v in WM.needSave.items()[::-1]:
-		print k,v
-		stack_node.append(LM.new(ListNode(Instruction("stack_pop",[k]))))
-	LN.appendLNs(stack_node).append(addrPopLN)
-	print stack_node
-	for x in stack_node:
-		stack_pop(x, WM, LM)
-	stack_pop(addrPopLN, WM, LM)
+	#	print k,v
+		stack_node.append(LM.new(ListNode(Instruction("STACK_POP",[k]))))
+	#LN.appendLNs(stack_node).append(addrPopLN)
+	#print stack_node
+	#for x in stack_node:
+	#	stack_pop(x, WM, LM)
+	#stack_pop(addrPopLN, WM, LM)
 
 	address = WM.addDataPtrWord(0,"returnLabel")
 
