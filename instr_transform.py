@@ -128,7 +128,26 @@ def trans_add(LN, WM, LM):
 	NEXT = WM.getNext()
 
 	WM.addNeedSave(param0)
-
+	if param1.getType == "data-const":
+		m_p1 = WM.const(-param1.value)
+		LN1 = LM.new(ListNode(Subneg4Instruction(
+				m_p1.getPtr(),
+				param2.getPtr(),
+				param0.getPtr(),
+				NEXT
+			)))
+		LN.replace(LM, LN1)
+		return
+	if param2.getType == "data-const":
+		m_p2 = WM.const(-param2.value)
+		LN1 = LM.new(ListNode(Subneg4Instruction(
+				m_p2.getPtr(),
+				param1.getPtr(),
+				param0.getPtr(),
+				NEXT
+			)))
+		LN.replace(LM, LN1)
+		return
 	LN1 = LM.new(ListNode(Subneg4Instruction(
 			param1.getPtr(),
 			c_0.getPtr(),
@@ -214,16 +233,30 @@ def trans_call(LN, WM, LM):
 	c_0 = WM.const(0)
 	c_m1 = WM.const(-1)
 
-	backAddress = WM.addDataWord(WM.label(LN.next.getALabel()),"nextLabel")
+	returnData = WM.result#WM.getName("d_"+str(LN.ins.params[2])+"_returnData")
+
+	NEXT = WM.getNext()
+
+	LN2 = LM.new(ListNode(Subneg4Instruction(
+		# 0, -1, temp, goto function
+		c_0.getPtr(),
+		returnData.getPtr(),
+		LN.ins.params[0].getPtr(),
+		NEXT
+	)))
 
 	stack_node = []
 	for k, v in WM.needSave.items():
 		stack_node.append(LM.new(ListNode(Instruction("STACK_PUSH",[k]))))
+	after_stack_node = []
+	for k, v in WM.needSave.items()[::-1]:
+	#	print k,v
+		after_stack_node.append(LM.new(ListNode(Instruction("STACK_POP",[k]))))
 	#LN.appendLNs(stack_node)
 	#for x in stack_node:
 	#	stack_push(x, WM, LM)
-
-	returnData = WM.getName("d_"+str(LN.ins.params[2])+"_returnData")
+	print "!!!!!!!!!!",LN,after_stack_node
+	backAddress = WM.addDataWord(WM.label((after_stack_node+[LN2])[0].getALabel()),"nextLabel")
 
 	LN1 = LM.new(ListNode(Subneg4Instruction(
 		# 0, -1, temp, goto function
@@ -239,20 +272,22 @@ def trans_call(LN, WM, LM):
 		print WM.functionInfo[str(LN.ins.params[2])], LN.ins.params[1]
 		print "!!!!!!! CALL ERROR !!!!!!!!!!!!!"
 		return
-	NEXT = WM.getNext()
+	
 	for arg, param in zip(WM.functionInfo[str(LN.ins.params[2])], LN.ins.params[1]):
 		LNs.append(
 			LM.new(ListNode(Subneg4Instruction(
-				# 0, -1, temp, goto function
+				# 0, param, arg, next
 				c_0.getPtr(),
 				param.getPtr(),
 				arg.getPtr(),
-				NEXT
+				NEXT,
+				">>> arg: $(res)\\n"
 			)))
-		)
+		)#copy params to arg
 	addrPushLN = LM.new(ListNode(Instruction("STACK_PUSH",[backAddress])))
-	LN.replaceLNs(LM, stack_node + LNs + [LN1,addrPushLN])
-
+	WM.addNeedSave(LN.ins.params[0])
+	LN.replaceLNs(LM, stack_node + LNs + [addrPushLN, LN1] + after_stack_node + [LN2])
+	
 
 def trans_ret(LN, WM, LM):
 	"""
@@ -267,36 +302,21 @@ need to loop the conversion or create another way
 	NEXT = WM.getNext()
 	param = LN.ins.params[0]
 
-	backAddress = WM.currentFunction["backAddress"]
-	returnData = WM.currentFunction["returnData"]
+	#backAddress = WM.currentFunction["backAddress"]
+	returnData = WM.result#WM.currentFunction["returnData"]
 	# stack pop, pop, pop
 	# set back address = stack pop
 	# goto backAddress at last
-	stack_node = []
-	addrPopLN = LM.new(ListNode(Instruction("STACK_POP",[backAddress])))
-
-	for k, v in WM.needSave.items()[::-1]:
-	#	print k,v
-		stack_node.append(LM.new(ListNode(Instruction("STACK_POP",[k]))))
-	#LN.appendLNs(stack_node).append(addrPopLN)
-	#print stack_node
-	#for x in stack_node:
-	#	stack_pop(x, WM, LM)
-	#stack_pop(addrPopLN, WM, LM)
 
 	address = WM.addDataPtrWord(0,"returnLabel")
+	addrPopLN = LM.new(ListNode(Instruction("STACK_POP",[address])))
 
-	LN1 = LM.new(ListNode(Subneg4Instruction(
-		c_0.getPtr(),
-		backAddress.getPtr(),
-		address.getPtr(),
-		NEXT
-	)))
 	LN2 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
 		param.getPtr(),
 		returnData.getPtr(),
-		NEXT
+		NEXT,
+		">>> return data: $(2), $(res)\\n"
 	)))
 	LN3 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
@@ -304,13 +324,13 @@ need to loop the conversion or create another way
 		temp.getPtr(),
 		address
 	)))
-	LN.replaceLNs(LM, stack_node+[addrPopLN, LN1, LN2, LN3])
+	LN.replaceLNs(LM, [addrPopLN] + [LN2, LN3])
 	#use stack
 	return
 
 def trans_icmp_slt(LN, WM, LM):
-	if(LN.next.ins.instrStr=="br" and len(LN.next.ins.params) == 3):
-		pass#LN1 =
+	#if(LN.next.ins.instrStr=="br" and len(LN.next.ins.params) == 3):
+	#	pass#LN1 =
 		#LM.new(ListNode)
 	# if arg1 < arg2 temp = 1
 	# arg1 arg2 temp    temp=arg2-arg1 if temp < 0 arg2 > arg1
@@ -322,7 +342,7 @@ def trans_icmp_slt(LN, WM, LM):
 	#if param1 < param2: param0 = 1 else -1
 
 
-		"""
+	"""
 	i1         c_0 param1 param1 L_slt_1
 	i2         c_0 param2 param2 Lge_0
 	i3 L_sge_tge_1:    param2 param1 T0 Llt_0
@@ -333,7 +353,7 @@ def trans_icmp_slt(LN, WM, LM):
 	i8         DEC c_0 TJ Lfinish
 	i9 Lge_0:  c_0 c_0 param0
 	#i10         DEC c_0 TJ Lfinish
-		"""
+	"""
 
 	"""
 	param1 < 0? goto L500
@@ -410,13 +430,13 @@ def trans_icmp_slt(LN, WM, LM):
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN.next.getALabel())
+		WM.label(LN.getNextInst().getALabel())
 	)))
 	LN4 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		param0.getPtr(),
-		WM.label(LN.next.getALabel())
+		WM.label(LN.getNextInst().getALabel())
 	)))
 	LN2 = LM.new(ListNode(Subneg4Instruction(
 		c_0.getPtr(),
@@ -433,17 +453,103 @@ def trans_icmp_slt(LN, WM, LM):
 
 	LN.replace(LM, LN1, LN2, LN3, LN4, LN5, LN6, LN7, LN8)
 
-def trans_icmp_ult(LN, Mem, LM):
+def trans_icmp_ult(LN, WM, LM):
+	
+	param1 = LN.ins.params[1]
+	param2 = LN.ins.params[2]
+	param0 = LN.ins.params[0]
+
+	c_0 = WM.const(0)
+	c_1 = WM.const(1)
+	c_m1 = WM.const(-1)
+	
+	temp = WM.getTemp(0)
+	NEXT = WM.getNext()
+
 	if(LN.next.ins.instrStr=="br" and len(LN.next.ins.params) == 3):
 		pass#LN1 =
-		LM.new(ListNode)
-	# if arg1 < arg2 temp = 1
-	# arg1 arg2 temp    temp=arg2-arg1 if temp < 0 arg2 > arg1
-	# 
-	#temp = Mem.temp()
-	ins1 = Instruction("subneg4",[Mem.ptr(LN.ins.params[1]), Mem.ptr(LN.ins.params[2]), Mem.ptr(LN.ins.params[0]), Label("NEXT")])
-	LN1 = LM.new(ListNode(ins1))
-	LN.replace(LM, LN1)
+		#LM.new(ListNode)
+	
+
+	"""
+
+
+	param1 < 0? goto L500
+	--- (param1 >= 0)
+	--- param2 < 0? -----> goto param2 >= param1
+	--- --- (param2 >= 0)
+	--- --- param1 - param2 < 0? -------> goto param1 < param2
+	--- --- ---------> goto param1 >= param2
+
+	L500 (param1 < 0)
+	--- param2 >= 0?(-1 - param2 < 0?) -----> goto param1 >= param2
+	--- (param2 < 0) param1 - param2 < 0? goto param1 < param2
+	--- --- goto param1 >= param2
+
+	L1: 0, param1, temp, L5
+	L2: 0, param2, temp, L7
+	L3: param2, param1, temp, L8
+	L4: 0, -1, res, Lfin
+	L5: param2, -1, temp, L7
+	L6: param2, param1, temp, L8
+	L7: 0, -1, res, Lfin
+	L8: 0, 1, res, NEXT
+
+L=-1 param1 >= param2
+L=1 param1 < param2
+
+	"""
+	LN8 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		c_1.getPtr(),
+		param0.getPtr(),
+		NEXT
+	)))
+	LN7 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		c_m1.getPtr(),
+		param0.getPtr(),
+		WM.label(LN.getNextInst().getALabel())
+	)))
+	LN6 = LM.new(ListNode(Subneg4Instruction(
+		param2.getPtr(),
+		param1.getPtr(),
+		temp.getPtr(),
+		WM.label(LN8.getALabel())
+	)))
+	LN5 = LM.new(ListNode(Subneg4Instruction(
+		param2.getPtr(),
+		c_m1.getPtr(),
+		temp.getPtr(),
+		WM.label(LN8.getALabel())
+	)))
+	LN4 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		c_m1.getPtr(),
+		param0.getPtr(),
+		WM.label(LN.getNextInst().getALabel())
+	)))
+	LN3 = LM.new(ListNode(Subneg4Instruction(
+		param2.getPtr(),
+		param1.getPtr(),
+		temp.getPtr(),
+		WM.label(LN8.getALabel())
+	)))
+	LN2 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		param2.getPtr(),
+		temp.getPtr(),
+		WM.label(LN7.getALabel())
+	)))
+	LN1 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		param1.getPtr(),
+		temp.getPtr(),
+		WM.label(LN5.getALabel())
+	)))
+
+
+	LN.replace(LM, LN1, LN2, LN3, LN4, LN5, LN6, LN7, LN8)
 
 
 
@@ -458,6 +564,47 @@ def stack_init(WM):
 	base = WM.addDataWord(WM.label("stack_start"),"stack_base")
 	pointer = WM.addDataWord(WM.label("stack_start"),"stack_pointer")
 	WM.setFlag("stack_init",(base, pointer))
+
+def raw_stack_push(LN, WM, LM):
+	c_0 = WM.const(0)
+	c_m1 = WM.const(-1)
+	NEXT = WM.getNext()
+
+	if not WM.hasFlag("stack_init"):
+		stack_init(WM)
+	base, pointer = WM.getFlag("stack_init")
+	"""
+	# LN: param0: 
+
+	"""
+
+	WRITE = WM.addDataPtrWord(0, "push_write")
+	param = LN.ins.params[0]
+	nodes = [
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, pointer, write, next
+			c_0.getPtr(),
+			pointer.getPtr(),
+			WRITE.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, arg, write: 0, next
+			c_0.getPtr(),
+			param.getPtr(),
+			WRITE,
+			NEXT,
+			">>> stack push: arg:${2} write:${3} result:${}\\n"
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# -1, pointer, pointer, next
+			c_m1.getPtr(),
+			pointer.getPtr(),
+			pointer.getPtr(),
+			NEXT
+		)))
+	]
+	LN.replaceLNs(LM, nodes)
 def stack_push(LN, WM, LM):
 	c_0 = WM.const(0)
 	c_m1 = WM.const(-1)
@@ -500,9 +647,45 @@ def stack_push(LN, WM, LM):
 
 	LN.replaceLNs(LM, pre_LNs)
 	return
-	
+def raw_stack_pop(LN, WM, LM):
+	c_0 = WM.const(0)
+	c_1 = WM.const(1)
+	NEXT = WM.getNext()
+
+	param = LN.ins.params[0]
+
+	if not WM.hasFlag("stack_init"):
+		stack_init(WM)
+	base, pointer = WM.getFlag("stack_init")
+
+	READ = WM.addDataPtrWord(0, "pop_read")
+
+	nodes = [
+		LM.new(ListNode(Subneg4Instruction(
+			# 1, pointer, pointer, next
+			c_1.getPtr(),
+			pointer.getPtr(),
+			pointer.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, pointer, read, next
+			c_0.getPtr(),
+			pointer.getPtr(),
+			READ.getPtr(),
+			NEXT
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# 0, read:0, param, next
+			c_0.getPtr(),
+			READ,
+			param.getPtr(),
+			NEXT,
+			">>> stack pop: read:${2} arg:${3} result:$()\\n"
+		)))
+	]
+	LN.replaceLNs(LM, nodes)
 def stack_pop(LN, WM, LM):
-	print "##########",LN
 	c_0 = WM.const(0)
 	c_m1 = WM.const(-1)
 	NEXT = WM.getNext()
@@ -533,7 +716,8 @@ def stack_pop(LN, WM, LM):
 			c_0.getPtr(),
 			backAddress.getPtr(),
 			ret_addr.getPtr(),
-			NEXT
+			NEXT,
+
 		))),
 		LM.new(ListNode(Subneg4Instruction(
 			# 
@@ -543,7 +727,7 @@ def stack_pop(LN, WM, LM):
 			WM.label("sr_stack_pop_start")
 		))),
 	]
-	print pre_LNs+after_LNs
+	#print pre_LNs+after_LNs
 	LN.replaceLNs(LM, pre_LNs+after_LNs)
 
 
@@ -599,7 +783,7 @@ L_backaddress:
 
 def sr_stack_push(WM, LM):
 	namespace_bak = WM.getNamespace(string=False)
-	WM.setNamespace(["sr","stack"])
+	WM.setNamespace(["sr","st"])
 
 	c_0 = WM.const(0)
 	c_1 = WM.const(1)
@@ -618,30 +802,31 @@ def sr_stack_push(WM, LM):
 
 	"""
 
-	ret_addr = WM.addDataPtrWord(0, "sr_stack_push_ret_addr")
-	arg = WM.addDataWord(0, "sr_stack_push_arg")
-	WRITE = WM.addDataPtrWord(0, "sr_stack_push_write")
+	ret_addr = WM.addDataPtrWord(0, "push_ret_addr")
+	arg = WM.addDataWord(0, "push_arg")
+	WRITE = WM.addDataPtrWord(0, "push_write")
 
 	nodes = [
-		LM.new(ListNode(Subneg4Instruction(
-			# -1, pointer, pointer, next
-			c_m1.getPtr(),
-			pointer.getPtr(),
-			pointer.getPtr(),
-			NEXT
-		))),
 		LM.new(ListNode(Subneg4Instruction(
 			# 0, pointer, write, next
 			c_0.getPtr(),
 			pointer.getPtr(),
 			WRITE.getPtr(),
 			NEXT
-		))),
+		)),"sr_stack_push_start"),
 		LM.new(ListNode(Subneg4Instruction(
 			# 0, arg, write: 0, next
 			c_0.getPtr(),
 			arg.getPtr(),
 			WRITE,
+			NEXT,
+			">>> stack push: arg:${2} write:${3} result:${}\\n"
+		))),
+		LM.new(ListNode(Subneg4Instruction(
+			# -1, pointer, pointer, next
+			c_m1.getPtr(),
+			pointer.getPtr(),
+			pointer.getPtr(),
 			NEXT
 		))),
 		LM.new(ListNode(Subneg4Instruction(
@@ -657,7 +842,7 @@ def sr_stack_push(WM, LM):
 
 def sr_stack_pop(WM, LM):
 	namespace_bak = WM.getNamespace(string=False)
-	WM.setNamespace(["sr","stack"])
+	WM.setNamespace(["sr","st"])
 
 	c_0 = WM.const(0)
 	c_1 = WM.const(1)
@@ -669,9 +854,9 @@ def sr_stack_pop(WM, LM):
 		stack_init(WM)
 	base, pointer = WM.getFlag("stack_init")
 
-	ret_addr = WM.addDataPtrWord(0, "stack_pop_ret_addr")
-	res = WM.addDataWord(0, "sr_stack_pop_res")
-	READ = WM.addDataPtrWord(0, "sr_stack_pop_read")
+	ret_addr = WM.addDataPtrWord(0, "pop_ret_addr")
+	res = WM.addDataWord(0, "pop_res")
+	READ = WM.addDataPtrWord(0, "pop_read")
 
 	nodes = [
 		LM.new(ListNode(Subneg4Instruction(
@@ -680,7 +865,7 @@ def sr_stack_pop(WM, LM):
 			pointer.getPtr(),
 			pointer.getPtr(),
 			NEXT
-		))),
+		)),"sr_stack_pop_start"),
 		LM.new(ListNode(Subneg4Instruction(
 			# 0, pointer, read, next
 			c_0.getPtr(),
@@ -693,7 +878,8 @@ def sr_stack_pop(WM, LM):
 			c_0.getPtr(),
 			READ,
 			res.getPtr(),
-			NEXT
+			NEXT,
+			">>> stack pop: read:${2} arg:${3} result:$()\\n"
 		))),
 		LM.new(ListNode(Subneg4Instruction(
 			# 0, -1, temp, backaddress
@@ -808,11 +994,15 @@ instrTransform = {
 	"br" : trans_br,
 	"ret" : trans_ret,
 	"icmp_slt" : trans_icmp_slt,
+	"icmp_ult" : trans_icmp_ult,
 	"mul" : goto_mult,
 	"call" : trans_call,
 }
 
-
+sysTransform = {
+	"STACK_POP": raw_stack_pop,
+	"STACK_PUSH": raw_stack_push
+}
 
 funcDict = {
 	"alloca" : trans_alloca,
@@ -906,5 +1096,116 @@ Llt_2:  INC Z dest
         DEC Z TJ Lfinish
 Lge_2:  Z Z dest
         DEC Z TJ Lfinish
+
+"""
+
+"""
+stack_start: 0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+ stack start push: arg:16 write:0 result:${res}
+ stack start push: arg:76 write:0 result:${res}
+
+
+
+stack push: arg:16 write:0 result:16
+arg: 10
+stack push: arg:340 write:0 result:340
+stack push: arg:10 write:0 result:10
+stack push: arg:8 write:0 result:8
+arg: 8
+stack push: arg:160 write:0 result:160
+stack push: arg:8 write:0 result:8
+stack push: arg:6 write:0 result:6
+arg: 6
+stack push: arg:160 write:0 result:160
+stack push: arg:6 write:0 result:6
+stack push: arg:4 write:0 result:4
+arg: 4
+stack push: arg:160 write:0 result:160
+stack push: arg:4 write:0 result:4
+stack push: arg:2 write:0 result:2
+arg: 2
+stack push: arg:160 write:0 result:160
+stack push: arg:2 write:0 result:2
+stack push: arg:0 write:0 result:0
+arg: 0
+stack push: arg:160 write:0 result:160
+stack pop: read:160 arg:0 result:160
+return data: 0, 0
+stack push: arg:0 write:160 result:0
+stack push: arg:0 write:0 result:0
+stack push: arg:-1 write:0 result:-1
+stack push: arg:0 write:0 result:0
+arg: -1
+stack push: arg:288 write:0 result:288
+stack pop: read:288 arg:160 result:288
+return data: -1, -1
+stack pop: read:0 arg:288 result:0
+return data: -1, -1
+stack push: arg:16 write:0 result:16
+arg: 10
+stack push: arg:340 write:0 result:340
+stack push: arg:10 write:0 result:10
+stack push: arg:8 write:0 result:8
+arg: 8
+stack push: arg:160 write:0 result:160
+stack push: arg:8 write:0 result:8
+stack push: arg:6 write:0 result:6
+arg: 6
+stack push: arg:160 write:0 result:160
+stack push: arg:6 write:0 result:6
+stack push: arg:4 write:0 result:4
+arg: 4
+stack push: arg:160 write:0 result:160
+stack push: arg:4 write:0 result:4
+stack push: arg:2 write:0 result:2
+arg: 2
+stack push: arg:160 write:0 result:160
+stack push: arg:2 write:0 result:2
+stack push: arg:0 write:0 result:0
+arg: 0
+stack push: arg:160 write:0 result:160
+stack pop: read:160 arg:0 result:160
+return data: 0, 0
+stack push: arg:0 write:160 result:0
+stack push: arg:0 write:0 result:0
+stack push: arg:-1 write:0 result:-1
+stack push: arg:0 write:0 result:0
+arg: -1
+stack push: arg:288 write:0 result:288
+stack pop: read:288 arg:160 result:288
+return data: -1, -1
+stack pop: read:0 arg:288 result:0
+return data: -1, -1
 
 """

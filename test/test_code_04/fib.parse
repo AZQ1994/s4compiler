@@ -3,7 +3,7 @@
 # Target triple: x86_64-unknown-linux-gnu
 [Function:fib](a ){
     [BasicBlock](entry){
-        [Instruction](0x1137110) : icmp_ult	: var(switch), /*=*/ var(a), int(2)
+        [Instruction](0x1137110) : icmp_ult : var(switch), var(a), int(2)
         [Instruction](0x11371a8) : br	: var(switch), var(sw.default), var(return)
     }[BasicBlock]
 #------------------------------------------------------

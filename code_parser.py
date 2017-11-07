@@ -27,7 +27,9 @@ class CodeParser:
 		return self.fullText
 
 	def parse(self):
+		#print self.fullText
 		self.removeComment()
+		#print self.fullText
 		self.parseModule()
 
 	def parseModule(self):
@@ -61,8 +63,9 @@ class CodeParser:
 			return a.strip()
 		self.fullText = map(w_strip,self.fullText)
 	def removeComment(self):
-		self.fullText = re.sub(r'\/\/[\S\s]*?[\n\r]|\#[\S\s]*?[\r\n]','',self.fullText)
-		self.fullText = re.sub(r'\/\*[\S\s]*?\*\/','',self.fullText)
+		self.fullText = re.sub(r'\/\*[\S\s]*?\*\/|\/\/[\S\s]*?[\n\r]|\#[\S\s]*?[\r\n]','',self.fullText)
+		#self.fullText = re.sub(r'\/\/[\S\s]*?[\n\r]|\#[\S\s]*?[\r\n]','',self.fullText)
+		#self.fullText = re.sub(r'\/\*[\S\s]*?\*\/','',self.fullText)
 """
 	def parseLine(self, line):
 		pass

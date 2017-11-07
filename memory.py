@@ -165,6 +165,7 @@ class WordManager(object):
 		self.functionInfo = {
 			#
 		}
+		self.result = self.addDataWord(0, "d_return_data")
 	def addNeedSave(self, w):
 		self.needSave[w]=True
 
@@ -247,7 +248,7 @@ class WordManager(object):
 		if name in self.wordDataDict:
 			return self.wordDataDict[name]
 		else:
-			word = Word("data", value, self, name)
+			word = Word("data-const", value, self, name)
 			self.wordDataDict[name] = word
 			self.nameToWord[name] = word
 			return word

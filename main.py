@@ -1,6 +1,6 @@
 
 from instruction import Instruction
-from instr_transform import instrTransform, funcDict, build_methods
+from instr_transform import instrTransform, funcDict, build_methods, sysTransform
 from memory import WordManager
 #from memory import Memory2
 #from memory import MemoryNode
@@ -114,13 +114,22 @@ class analyze:
 					for x in current.opt:
 						self.WM.needSave[x] = True
 					self.WM.currentFunction = {
-						"backAddress": self.WM.getName("d_"+"_".join(self.WM.getNamespace(False)[1:]+["backAddress"])),
+						#"backAddress": self.WM.getName("d_"+"_".join(self.WM.getNamespace(False)[1:]+["backAddress"])),
 						"returnData" : self.WM.getName("d_"+"_".join(self.WM.getNamespace(False)[1:]+["returnData"]))
 					}
 				current = current.next
 				continue
 			if current.ins.instrStr in instrTransform:
 				instrTransform[current.ins.instrStr](current, self.WM, self.LM)
+			current = current.next
+		
+		current = self.startNode
+		while current != None:
+			if current.sys:
+				current = current.next
+				continue
+			if current.ins.instrStr in sysTransform:
+				sysTransform[current.ins.instrStr](current, self.WM, self.LM)
 			current = current.next
 	def subneg4_opt_01(self):
 		current = self.startNode
@@ -134,8 +143,8 @@ class analyze:
 
 #p = CodeParser("test/test_code_03/mult.o2.parse")
 #p = CodeParser("test/test_code_01/plus.parse")
-p = CodeParser("test/test_code_04/test.parse")
-#p = CodeParser("test/test_code_04/fib.parse")
+#p = CodeParser("test/test_code_04/test.parse")
+p = CodeParser("test/test_code_04/fib.parse")
 #p = CodeParser("test/test_code_03/main.parse")
 
 p.parse()
