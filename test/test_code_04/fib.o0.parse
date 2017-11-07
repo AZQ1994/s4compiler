@@ -1,0 +1,54 @@
+# Successfully read Module:
+# Name: fib.o0.bc
+# Target triple: x86_64-unknown-linux-gnu
+[Function:fib](a ){
+    [BasicBlock](entry){
+        [Instruction](0x2051b98) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2050798) : alloca	: var(a.addr), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2050820) : store	: var(a), var(a.addr)
+        [Instruction](0x2050888) : load	: ptr(0x2050888), var(a.addr)
+        [Instruction](0x20508d8) : switch	: ptr(0x2050888), var(sw.default), int(0), var(sw.bb), int(1), var(sw.bb1)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](sw.bb){
+        [Instruction](0x20502c0) : store	: int(0), var(retval)
+        [Instruction](0x2050328) : br	: var(return)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](sw.bb1){
+        [Instruction](0x20503a0) : store	: int(1), var(retval)
+        [Instruction](0x2050408) : br	: var(return)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](sw.default){
+        [Instruction](0x2050468) : load	: ptr(0x2050468), var(a.addr)
+        [Instruction](0x204cd70) : sub	: var(sub), /*=*/ ptr(0x2050468), int(2)
+        [Instruction](0x204cdf0) : call	: var(call), /*=*/ var(sub), var(fib)
+        [Instruction](0x204ce68) : load	: ptr(0x204ce68), var(a.addr)
+        [Instruction](0x204cee0) : sub	: var(sub2), /*=*/ ptr(0x204ce68), int(1)
+        [Instruction](0x204cf60) : call	: var(call3), /*=*/ var(sub2), var(fib)
+        [Instruction](0x204cff0) : add	: var(add), /*=*/ var(call), var(call3)
+        [Instruction](0x204d070) : store	: var(add), var(retval)
+        [Instruction](0x204d0d8) : br	: var(return)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](return){
+        [Instruction](0x20504c8) : load	: ptr(0x20504c8), var(retval)
+        [Instruction](0x204d138) : ret	: ptr(0x20504c8)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
+[Function:main](){
+    [BasicBlock](entry){
+        [Instruction](0x2052ef8) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2052f68) : alloca	: var(a), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2052ff0) : store	: int(0), var(retval)
+        [Instruction](0x2053070) : store	: int(10), var(a)
+        [Instruction](0x20530d8) : load	: ptr(0x20530d8), var(a)
+        [Instruction](0x2053150) : call	: var(call), /*=*/ ptr(0x20530d8), var(fib)
+        [Instruction](0x20531c8) : ret	: var(call)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
