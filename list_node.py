@@ -8,7 +8,11 @@ class ListNode(object):
 		self.opt = opt
 		if label != None:
 			self.label.append(label)
-		
+	def getNextInst(self):
+		current = self.next
+		while current != None and current.sys:
+			current = current.next
+		return current
 	def setNext(self, LN):
 		self.next = LN
 		LN.prev = self
