@@ -1,0 +1,27 @@
+# Successfully read Module:
+# Name: test02.bc
+# Target triple: x86_64-unknown-linux-gnu
+[Function:add](a b ){
+    [BasicBlock](entry){
+        [Instruction](0x16ccf58) : alloca	: var(a.addr), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x16cba98) : alloca	: var(b.addr), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x16cbb20) : store	: var(a), var(a.addr)
+        [Instruction](0x16cbba0) : store	: var(b), var(b.addr)
+        [Instruction](0x16cbc08) : load	: ptr(0x16cbc08), var(a.addr)
+        [Instruction](0x16cbc68) : load	: ptr(0x16cbc68), var(b.addr)
+        [Instruction](0x16cd0a0) : add	: var(add), /*=*/ ptr(0x16cbc08), ptr(0x16cbc68)
+        [Instruction](0x16cb9c8) : ret	: var(add)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
+[Function:main](){
+    [BasicBlock](entry){
+        [Instruction](0x16c8488) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x16cb460) : store	: int(0), var(retval)
+        [Instruction](0x16cb4f8) : call	: var(call), /*=*/ int(1), int(2), var(add)
+        [Instruction](0x16cb568) : ret	: var(call)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================

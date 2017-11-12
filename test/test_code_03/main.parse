@@ -1,0 +1,11 @@
+# Successfully read Module:
+# Name: mult.bc
+# Target triple: x86_64-unknown-linux-gnu
+[Function:main](a b ){
+    [BasicBlock](entry){
+        [Instruction](0x10612b0) : mul	: var(mul), /*=*/ var(b), var(a)
+        [Instruction](0x1061318) : ret	: var(mul)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
