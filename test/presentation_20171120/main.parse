@@ -1,0 +1,42 @@
+# Successfully read Module:
+# Name: main.bc
+# Target triple: x86_64-unknown-linux-gnu
+[Function:main](){
+    [BasicBlock](entry){
+        [Instruction](0x2c44c18) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2c44b68) : alloca	: var(i), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2c46cc8) : alloca	: var(res), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2c46d50) : store	: int(0), var(retval)
+        [Instruction](0x2c46dd0) : store	: int(0), var(res)
+        [Instruction](0x2c46e50) : store	: int(1), var(i)
+        [Instruction](0x2c46eb8) : br	: var(for.cond)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond){
+        [Instruction](0x2c46f18) : load	: ptr(0x2c46f18), var(i)
+        [Instruction](0x2c46f90) : icmp_sle	: var(cmp), /*=*/ ptr(0x2c46f18), int(100)
+        [Instruction](0x2c44cb8) : br	: var(cmp), var(for.end), var(for.body)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body){
+        [Instruction](0x2c44d18) : load	: ptr(0x2c44d18), var(i)
+        [Instruction](0x2c47188) : load	: ptr(0x2c47188), var(res)
+        [Instruction](0x2c47200) : add	: var(add), /*=*/ ptr(0x2c47188), ptr(0x2c44d18)
+        [Instruction](0x2c47280) : store	: var(add), var(res)
+        [Instruction](0x2c472e8) : br	: var(for.inc)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.inc){
+        [Instruction](0x2c47348) : load	: ptr(0x2c47348), var(i)
+        [Instruction](0x2c473c0) : add	: var(inc), /*=*/ ptr(0x2c47348), int(1)
+        [Instruction](0x2c47440) : store	: var(inc), var(i)
+        [Instruction](0x2c474a8) : br	: var(for.cond)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.end){
+        [Instruction](0x2c47508) : load	: ptr(0x2c47508), var(res)
+        [Instruction](0x2c47568) : ret	: ptr(0x2c47508)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
