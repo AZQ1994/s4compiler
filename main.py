@@ -144,8 +144,9 @@ class analyze:
 #p = CodeParser("test/test_code_03/mult.o2.parse")
 #p = CodeParser("test/test_code_01/plus.parse")
 #p = CodeParser("test/test_code_04/test.parse")
-p = CodeParser("test/test_code_04/fib.parse")
+#p = CodeParser("test/test_code_04/fib.parse")
 #p = CodeParser("test/test_code_03/main.parse")
+p = CodeParser("test/presentation_20171120/main.parse")
 
 p.parse()
 p.printModule()
