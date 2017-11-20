@@ -144,7 +144,8 @@ def trans_add(LN, WM, LM):
 				m_p2.getPtr(),
 				param1.getPtr(),
 				param0.getPtr(),
-				NEXT
+				NEXT,
+				"\t// add"
 			)))
 		LN.replace(LM, LN1)
 		return
@@ -152,7 +153,8 @@ def trans_add(LN, WM, LM):
 			param1.getPtr(),
 			c_0.getPtr(),
 			temp.getPtr(),
-			NEXT
+			NEXT,
+			"\t// add"
 		)))
 	LN2 = LM.new(ListNode(Subneg4Instruction(
 			temp.getPtr(),
@@ -175,7 +177,8 @@ def trans_load(LN, WM, LM):
 			c_0.getPtr(),
 			param1.getPtr(),
 			param0.getPtr(),
-			NEXT
+			NEXT,
+			"\t// load"
 		)))
 	LN.replace(LM, LN1)
 
@@ -191,7 +194,8 @@ def trans_store(LN, WM, LM):
 			c_0.getPtr(),
 			param0.getPtr(),
 			param1.getPtr(),
-			NEXT
+			NEXT,
+			"\t// store"
 		)))
 	LN.replace(LM, LN1)
 
@@ -206,7 +210,8 @@ def trans_br(LN, WM, LM):
 			c_0.getPtr(),
 			c_m1.getPtr(),
 			temp.getPtr(),
-			LN.ins.params[0]
+			LN.ins.params[0],
+			"\t// br %s"%LN.ins.params[0]
 		)))
 		LN.replace(LM, LN1)
 	elif len(LN.ins.params) == 3:
@@ -219,7 +224,8 @@ def trans_br(LN, WM, LM):
 			c_0.getPtr(),
 			param0.getPtr(),
 			temp.getPtr(),
-			LN.ins.params[1]
+			LN.ins.params[1],
+			"\t// br"
 		)))
 		LN2 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
@@ -238,7 +244,7 @@ def trans_call(LN, WM, LM):
 	NEXT = WM.getNext()
 
 	LN2 = LM.new(ListNode(Subneg4Instruction(
-		# 0, -1, temp, goto function
+		# copy return data
 		c_0.getPtr(),
 		returnData.getPtr(),
 		LN.ins.params[0].getPtr(),
@@ -263,7 +269,8 @@ def trans_call(LN, WM, LM):
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		temp.getPtr(),
-		LN.ins.params[2]
+		LN.ins.params[2],
+		"\t// call %s"%LN.ins.params[2]
 	)))
 
 	LNs = []
@@ -322,11 +329,85 @@ need to loop the conversion or create another way
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		temp.getPtr(),
-		address
+		address,
+		"\t// ret"
 	)))
 	LN.replaceLNs(LM, [addrPopLN] + [LN2, LN3])
 	#use stack
 	return
+
+def trans_icmp_sle(LN, WM, LM):
+	"""
+	if param1 <= param2 set 1 else set -1
+
+	param1 < 0? goto L500
+	--- (param1 >= 0)
+	--- param2 > -1? goto L800 
+	L300 *param1 > param2 set -1 goto Lfin
+	L500(param1<0)
+	--- param2 > -1? goto *param1 <= param2 set 1
+	--- --- (param2 < 0)
+	L800---  param2 - param1 < 0? goto L300
+	--- --- --- param1 <= param2 set 1
+
+
+	L0: 0 param1 temp L3
+	L1: param2 -1 temp L4
+	L2: 0 -1 res Lfin
+	L3: param2 -1 temp L2
+	L4: param1 param2 temp L2
+	L5: 0 1 res NEXT
+	"""
+	param1 = LN.ins.params[1]
+	param2 = LN.ins.params[2]
+	param0 = LN.ins.params[0]
+
+	c_0 = WM.const(0)
+	c_1 = WM.const(1)
+	c_m1 = WM.const(-1)
+	
+	temp = WM.getTemp(0)
+	NEXT = WM.getNext()
+
+	LN5 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		c_1.getPtr(),
+		param0.getPtr(),
+		NEXT
+	)))
+	LN2 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		c_m1.getPtr(),
+		param0.getPtr(),
+		WM.label(LN.getNextInst().getALabel())
+	)))
+	LN4 = LM.new(ListNode(Subneg4Instruction(
+		param1.getPtr(),
+		param2.getPtr(),
+		temp.getPtr(),
+		WM.label(LN2.getALabel())
+	)))
+	LN3 = LM.new(ListNode(Subneg4Instruction(
+		param2.getPtr(),
+		c_1.getPtr(),
+		temp.getPtr(),
+		WM.label(LN2.getALabel())
+	)))
+	LN1 = LM.new(ListNode(Subneg4Instruction(
+		param2.getPtr(),
+		c_1.getPtr(),
+		temp.getPtr(),
+		WM.label(LN4.getALabel())
+	)))
+	LN0 = LM.new(ListNode(Subneg4Instruction(
+		c_0.getPtr(),
+		param1.getPtr(),
+		temp.getPtr(),
+		WM.label(LN3.getALabel()),
+		"\t// sle"
+	)))
+	LN.replace(LM, LN0, LN1, LN2, LN3, LN4, LN5)
+
 
 def trans_icmp_slt(LN, WM, LM):
 	#if(LN.next.ins.instrStr=="br" and len(LN.next.ins.params) == 3):
@@ -448,7 +529,8 @@ def trans_icmp_slt(LN, WM, LM):
 		c_0.getPtr(),
 		param1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN7.getALabel())
+		WM.label(LN7.getALabel()),
+		"\t// slt"
 	)))
 
 	LN.replace(LM, LN1, LN2, LN3, LN4, LN5, LN6, LN7, LN8)
@@ -545,7 +627,8 @@ L=1 param1 < param2
 		c_0.getPtr(),
 		param1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN5.getALabel())
+		WM.label(LN5.getALabel()),
+		"\t// ult"
 	)))
 
 
@@ -982,6 +1065,7 @@ instrTransform = {
 	"ret" : trans_ret,
 	"icmp_slt" : trans_icmp_slt,
 	"icmp_ult" : trans_icmp_ult,
+	"icmp_sle" : trans_icmp_sle,
 	"mul" : goto_mult,
 	"call" : trans_call,
 }

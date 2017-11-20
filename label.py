@@ -1,4 +1,4 @@
-class Label:
+class Label(object):
 	def __init__(self, name):
 		self.name = name.replace(".","_")
 	def __repr__(self):
