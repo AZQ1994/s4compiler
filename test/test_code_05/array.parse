@@ -1,0 +1,21 @@
+# Successfully read Module:
+# Name: array.bc
+# Target triple: x86_64-unknown-linux-gnu
+[GlobalVariable:arr.array 0x2165980]
+[Function:arr](i ){
+    [BasicBlock](entry){
+        [Instruction](0x2167b68) : sext	: var(idxprom), /*=*/ var(i)
+        [Instruction](0x2167bf8) : getelementptr	: var(arrayidx), /*=*/ var(arr.array), int(0), var(idxprom)
+        [Instruction](0x2167c68) : load	: ptr(0x2167c68), var(arrayidx)
+        [Instruction](0x2167cc8) : ret	: ptr(0x2167c68)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
+[Function:main](){
+    [BasicBlock](entry){
+        [Instruction](0x21678b8) : ret	: int(5)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================
