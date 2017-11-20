@@ -255,7 +255,7 @@ def trans_call(LN, WM, LM):
 	#LN.appendLNs(stack_node)
 	#for x in stack_node:
 	#	stack_push(x, WM, LM)
-	print "!!!!!!!!!!",LN,after_stack_node
+	#print "!!!!!!!!!!",LN,after_stack_node
 	backAddress = WM.addDataWord(WM.label((after_stack_node+[LN2])[0].getALabel()),"nextLabel")
 
 	LN1 = LM.new(ListNode(Subneg4Instruction(
@@ -267,7 +267,7 @@ def trans_call(LN, WM, LM):
 	)))
 
 	LNs = []
-	print WM.functionInfo
+	#print WM.functionInfo
 	if len(WM.functionInfo[str(LN.ins.params[2])]) != len(LN.ins.params[1]):
 		print WM.functionInfo[str(LN.ins.params[2])], LN.ins.params[1]
 		print "!!!!!!! CALL ERROR !!!!!!!!!!!!!"
@@ -466,7 +466,7 @@ def trans_icmp_ult(LN, WM, LM):
 	temp = WM.getTemp(0)
 	NEXT = WM.getNext()
 
-	if(LN.next.ins.instrStr=="br" and len(LN.next.ins.params) == 3):
+	if(LN.getNextInst().ins.instrStr=="br" and len(LN.getNextInst().ins.params) == 3):
 		pass#LN1 =
 		#LM.new(ListNode)
 	
@@ -594,7 +594,7 @@ def raw_stack_push(LN, WM, LM):
 			param.getPtr(),
 			WRITE,
 			NEXT,
-			">>> stack push: arg:${2} write:${3} result:${}\\n"
+			">>> stack push: arg:${2} write:${3} result:${} "+str(param)+"\\n"
 		))),
 		LM.new(ListNode(Subneg4Instruction(
 			# -1, pointer, pointer, next
@@ -681,7 +681,7 @@ def raw_stack_pop(LN, WM, LM):
 			READ,
 			param.getPtr(),
 			NEXT,
-			">>> stack pop: read:${2} arg:${3} result:$()\\n"
+			">>> stack pop: read:${2} arg:${3} result:$() "+str(param)+"\\n"
 		)))
 	]
 	LN.replaceLNs(LM, nodes)
@@ -737,20 +737,7 @@ def stack_pop(LN, WM, LM):
 
 	#WM.
 """
-首先，stack初始化的时候
-要先把变量做出来，
-但这个变量是特殊的
-其实可以用WM去做吧
 
-
-stack使用
-
-* call
-函数被call之后需要将正在执行的函数的需要备份的变量一次push到stack里面
-并把相应的返回地址（需要把地址存在内存里）带入到相应函数的位置
-然后把带入的数据放入被呼出的函数的相应变量的位置，
-执行函数
-准备好返回的时候的相应
 
 func
 func_arg1
@@ -1072,33 +1059,6 @@ t_** -> system temporaries
 
 """
 
-
-"""
-        Z src1 src1 L_slt_1
-L_sge_1:        Z src2 src2 Lge_0
-L_sge_tge_1:    src2 src1 T0 Llt_0
-        DEC Z TJ Lge_0
-L_slt_1:        Z src2 src2 L_sge_tge_1
-L_slt_tge_1:    DEC Z TJ Llt_0
-Llt_0:  INC Z dest
-        DEC Z TJ Lfinish
-Lge_0:  Z Z dest
-        DEC Z TJ Lfinish
-        Z Z Z
-        MIN src1 T0 L_slt_3
-L_sge_3:        MIN src2 T1 L_sge_tlt_3
-L_sge_tge_3:    T1 T0 T0 Llt_2
-        DEC Z TJ Lge_2
-L_slt_3:        MIN src2 T1 L_sge_tge_3
-L_slt_tge_3:    DEC Z TJ Llt_2
-L_sge_tlt_3:    DEC Z TJ Lge_2
-Llt_2:  INC Z dest
-        DEC Z TJ Lfinish
-Lge_2:  Z Z dest
-        DEC Z TJ Lfinish
-
-"""
-
 """
 stack_start: 0
 0
@@ -1132,80 +1092,5 @@ stack_start: 0
 0
 0
 
- stack start push: arg:16 write:0 result:${res}
- stack start push: arg:76 write:0 result:${res}
-
-
-
-stack push: arg:16 write:0 result:16
-arg: 10
-stack push: arg:340 write:0 result:340
-stack push: arg:10 write:0 result:10
-stack push: arg:8 write:0 result:8
-arg: 8
-stack push: arg:160 write:0 result:160
-stack push: arg:8 write:0 result:8
-stack push: arg:6 write:0 result:6
-arg: 6
-stack push: arg:160 write:0 result:160
-stack push: arg:6 write:0 result:6
-stack push: arg:4 write:0 result:4
-arg: 4
-stack push: arg:160 write:0 result:160
-stack push: arg:4 write:0 result:4
-stack push: arg:2 write:0 result:2
-arg: 2
-stack push: arg:160 write:0 result:160
-stack push: arg:2 write:0 result:2
-stack push: arg:0 write:0 result:0
-arg: 0
-stack push: arg:160 write:0 result:160
-stack pop: read:160 arg:0 result:160
-return data: 0, 0
-stack push: arg:0 write:160 result:0
-stack push: arg:0 write:0 result:0
-stack push: arg:-1 write:0 result:-1
-stack push: arg:0 write:0 result:0
-arg: -1
-stack push: arg:288 write:0 result:288
-stack pop: read:288 arg:160 result:288
-return data: -1, -1
-stack pop: read:0 arg:288 result:0
-return data: -1, -1
-stack push: arg:16 write:0 result:16
-arg: 10
-stack push: arg:340 write:0 result:340
-stack push: arg:10 write:0 result:10
-stack push: arg:8 write:0 result:8
-arg: 8
-stack push: arg:160 write:0 result:160
-stack push: arg:8 write:0 result:8
-stack push: arg:6 write:0 result:6
-arg: 6
-stack push: arg:160 write:0 result:160
-stack push: arg:6 write:0 result:6
-stack push: arg:4 write:0 result:4
-arg: 4
-stack push: arg:160 write:0 result:160
-stack push: arg:4 write:0 result:4
-stack push: arg:2 write:0 result:2
-arg: 2
-stack push: arg:160 write:0 result:160
-stack push: arg:2 write:0 result:2
-stack push: arg:0 write:0 result:0
-arg: 0
-stack push: arg:160 write:0 result:160
-stack pop: read:160 arg:0 result:160
-return data: 0, 0
-stack push: arg:0 write:160 result:0
-stack push: arg:0 write:0 result:0
-stack push: arg:-1 write:0 result:-1
-stack push: arg:0 write:0 result:0
-arg: -1
-stack push: arg:288 write:0 result:288
-stack pop: read:288 arg:160 result:288
-return data: -1, -1
-stack pop: read:0 arg:288 result:0
-return data: -1, -1
 
 """

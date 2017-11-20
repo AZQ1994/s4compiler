@@ -110,7 +110,7 @@ class analyze:
 					self.WM.setNamespace(current.opt)
 				if current.ins == "function":
 					self.WM.needSave = {}
-					print current.opt
+					#print current.opt
 					for x in current.opt:
 						self.WM.needSave[x] = True
 					self.WM.currentFunction = {
