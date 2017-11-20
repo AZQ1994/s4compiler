@@ -144,7 +144,8 @@ def trans_add(LN, WM, LM):
 				m_p2.getPtr(),
 				param1.getPtr(),
 				param0.getPtr(),
-				NEXT
+				NEXT,
+				"\t// add"
 			)))
 		LN.replace(LM, LN1)
 		return
@@ -152,7 +153,8 @@ def trans_add(LN, WM, LM):
 			param1.getPtr(),
 			c_0.getPtr(),
 			temp.getPtr(),
-			NEXT
+			NEXT,
+			"\t// add"
 		)))
 	LN2 = LM.new(ListNode(Subneg4Instruction(
 			temp.getPtr(),
@@ -175,7 +177,8 @@ def trans_load(LN, WM, LM):
 			c_0.getPtr(),
 			param1.getPtr(),
 			param0.getPtr(),
-			NEXT
+			NEXT,
+			"\t// load"
 		)))
 	LN.replace(LM, LN1)
 
@@ -191,7 +194,8 @@ def trans_store(LN, WM, LM):
 			c_0.getPtr(),
 			param0.getPtr(),
 			param1.getPtr(),
-			NEXT
+			NEXT,
+			"\t// store"
 		)))
 	LN.replace(LM, LN1)
 
@@ -206,7 +210,8 @@ def trans_br(LN, WM, LM):
 			c_0.getPtr(),
 			c_m1.getPtr(),
 			temp.getPtr(),
-			LN.ins.params[0]
+			LN.ins.params[0],
+			"\t// br %s"%LN.ins.params[0]
 		)))
 		LN.replace(LM, LN1)
 	elif len(LN.ins.params) == 3:
@@ -219,7 +224,8 @@ def trans_br(LN, WM, LM):
 			c_0.getPtr(),
 			param0.getPtr(),
 			temp.getPtr(),
-			LN.ins.params[1]
+			LN.ins.params[1],
+			"\t// br"
 		)))
 		LN2 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
@@ -238,7 +244,7 @@ def trans_call(LN, WM, LM):
 	NEXT = WM.getNext()
 
 	LN2 = LM.new(ListNode(Subneg4Instruction(
-		# 0, -1, temp, goto function
+		# copy return data
 		c_0.getPtr(),
 		returnData.getPtr(),
 		LN.ins.params[0].getPtr(),
@@ -263,7 +269,8 @@ def trans_call(LN, WM, LM):
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		temp.getPtr(),
-		LN.ins.params[2]
+		LN.ins.params[2],
+		"\t// call %s"%LN.ins.params[2]
 	)))
 
 	LNs = []
@@ -322,7 +329,8 @@ need to loop the conversion or create another way
 		c_0.getPtr(),
 		c_m1.getPtr(),
 		temp.getPtr(),
-		address
+		address,
+		"\t// ret"
 	)))
 	LN.replaceLNs(LM, [addrPopLN] + [LN2, LN3])
 	#use stack
@@ -395,7 +403,8 @@ def trans_icmp_sle(LN, WM, LM):
 		c_0.getPtr(),
 		param1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN3.getALabel())
+		WM.label(LN3.getALabel()),
+		"\t// sle"
 	)))
 	LN.replace(LM, LN0, LN1, LN2, LN3, LN4, LN5)
 
@@ -520,7 +529,8 @@ def trans_icmp_slt(LN, WM, LM):
 		c_0.getPtr(),
 		param1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN7.getALabel())
+		WM.label(LN7.getALabel()),
+		"\t// slt"
 	)))
 
 	LN.replace(LM, LN1, LN2, LN3, LN4, LN5, LN6, LN7, LN8)
@@ -617,7 +627,8 @@ L=1 param1 < param2
 		c_0.getPtr(),
 		param1.getPtr(),
 		temp.getPtr(),
-		WM.label(LN5.getALabel())
+		WM.label(LN5.getALabel()),
+		"\t// ult"
 	)))
 
 
