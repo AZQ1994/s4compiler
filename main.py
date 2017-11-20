@@ -2,12 +2,12 @@
 from instruction import Instruction
 from instr_transform import instrTransform, funcDict, build_methods, sysTransform
 from memory import WordManager
-#from memory import Memory2
+from memory import Word
 #from memory import MemoryNode
 from list_node import ListNode
 #from subneg4_list_node import Subneg4ListNode
 from label import LabelManager
-#from label import Label
+from label import Label
 from code_parser import CodeParser
 
 import re
@@ -28,8 +28,9 @@ class analyze:
 		self.endNode = ListNode("end", sys = True)
 		self.startNode.setNext(self.endNode)
 		append_node = self.startNode
-		self.WM = WordManager()
 		self.LM = LabelManager()
+		self.WM = WordManager(self.LM)
+		
 		append_node = append_node.append(self.LM.new(ListNode(Instruction("call",[self.WM.getName("res"),[],self.WM.label("f_main")]))))
 		append_node = append_node.append(self.LM.new(ListNode(Instruction("br",[self.WM.getHalt()]))))
 		self.WM.pushNamespace("f")
@@ -131,14 +132,47 @@ class analyze:
 			if current.ins.instrStr in sysTransform:
 				sysTransform[current.ins.instrStr](current, self.WM, self.LM)
 			current = current.next
+
+	def opt_label(self):
+		current = self.startNode
+		#print self.WM.labelDict
+		while current != None:
+			if len(current.label) > 1:
+				if type(current.label[0]) != Label:
+					print "label incorrect class!!!!!!"
+				for l in current.label[1:]:
+					if type(l) != Label:
+						print "label incorrect class!!!!!!"
+						continue
+					if self.WM.labelDict.has_key(l.name):
+						for li in self.WM.labelDict[l.name]:
+							if li.type != "label":
+								print "word incorrect type!!!!!!"
+							li.value = current.label[0].name
+				current.label=[current.label[0]]
+			current = current.next
 	def subneg4_opt_01(self):
 		current = self.startNode
 		while current != None:
 			if current.sys:
 				current = current.next
 			current = current.next
-
-
+	def opt_variable_name(self):
+		count = 0
+		for key, value in self.WM.wordDataDict.items():
+			if type(value) == Word:
+				#print value
+				value.label = "V"+str(count)
+				count += 1
+			else:
+				print "what????"+str(value)+"  "+str(type(value))
+		for key, value in self.WM.wordDataPtrDict.items():
+			if type(value) == Word:
+				#print value
+				value.label = "V"+str(count)
+				count += 1
+			else:
+				print "what????"+str(value)+"  "+str(type(value))
 
 
 #p = CodeParser("test/test_code_03/mult.o2.parse")
@@ -159,6 +193,9 @@ a = analyze(p.functions)
 a.printNodes()
 print "***************"
 a.convert()
+print "***************"
+a.opt_label()
+a.opt_variable_name()
 a.printNodes()
 
 a.WM.dataMem()

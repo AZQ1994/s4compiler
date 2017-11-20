@@ -1,3 +1,4 @@
+from label import Label
 class MemoryNode:
 	## mem_type : temp, const, variable
 	def __init__(self, name, mem_type):
@@ -108,7 +109,7 @@ class Word(object):
 	def getPtr(self):
 		if(self.label==None):
 			raise Error
-		return self.manager.addPtrWord(self.label)
+		return self.manager.addPtrWord(self)#.label)
 	def __str__(self):
 		if self.label == None:
 			label = ""
@@ -118,6 +119,9 @@ class Word(object):
 		#if self.type == "ptr":
 		if type(self.value) is Word and self.value.type == "label":
 			return label + "&" + str(self.value)
+
+		if self.type=="ptr" and type(self.value) is Word:
+			return label + self.value.label
 		return label + str(self.value) #+ "("+self.type+")"
 	def __repr__(self):
 		if self.label == None:
@@ -140,7 +144,7 @@ class WordManager(object):
 	wordDataDict		
 	wordSymbolDict		
 	"""
-	def __init__(self):
+	def __init__(self, LM):
 		self.wordPtrDict = {}
 		self.wordDataDict = {}
 		self.wordDataPtrDict = {}
@@ -166,6 +170,7 @@ class WordManager(object):
 			#
 		}
 		self.result = self.addDataWord(0, "d_return_data")
+		self.LM = LM
 	def addNeedSave(self, w):
 		self.needSave[w]=True
 
@@ -268,8 +273,18 @@ class WordManager(object):
 		return self.wordSymbolDict["halt"]
 
 	def label(self, name):
+		"""
+		all using of label comes from here!
+		"""
+
+		if type(name) == Label:
+			name = name.name
+		print type(name)
 		l = Word("label", name, self)
-		self.labelDict[id(l)]=l
+		if self.labelDict.has_key(name):
+			self.labelDict[name].append(l)
+		else:
+			self.labelDict[name]=[l]
 		return l
 
 	def dataMem(self):
@@ -291,6 +306,6 @@ class WordManager(object):
 
 """
 
-test = WordManager()
-word = test.addPtrWord("abc")
-print id(word)
+#test = WordManager()
+#word = test.addPtrWord("abc")
+#print id(word)
