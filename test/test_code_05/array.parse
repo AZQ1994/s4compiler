@@ -3,17 +3,17 @@
 # Target triple: x86_64-unknown-linux-gnu
 [Function:arr](i ){
     [BasicBlock](entry){
-        [Instruction](0x1e1df48) : sext	: var(idxprom), /*=*/ var(i)
-        [Instruction](0x1e217e8) : getelementptr	: var(arrayidx), /*=*/ var(arr.array), int(0), var(idxprom)
-        [Instruction](0x1e21858) : load	: ptr(0x1e21858), var(arrayidx)
-        [Instruction](0x1e214c8) : ret	: ptr(0x1e21858)
+        [Instruction](0x12ebf48) : sext	: var(idxprom), /*=*/ var(i)
+        [Instruction](0x12ef7e8) : getelementptr	: var(arrayidx), /*=*/ var(arr.array), int(0), var(idxprom)
+        [Instruction](0x12ef858) : load	: ptr(0x12ef858), var(arrayidx)
+        [Instruction](0x12ef4c8) : ret	: ptr(0x12ef858)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]
 #======================================================
 [Function:main](){
     [BasicBlock](entry){
-        [Instruction](0x1e212c8) : ret	: int(5)
+        [Instruction](0x12ef2c8) : ret	: int(5)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]

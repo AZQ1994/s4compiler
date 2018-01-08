@@ -1,1 +1,50 @@
-sh: 1: ./test/test_code_05/../../output: not found
+<Module>
+  <!-- ; ModuleID = 'test/test_code_05/array.o0.bc' -->
+  <!-- source_filename = " test/test_code_05/array.c  "-->
+  <!-- target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128" -->
+  <!-- target triple = "x86_64-unknown-linux-gnu" -->
+
+arr.array = private unnamed_addr constant [10 x i32] [i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9], align 16
+
+  <!-- Function Attrs: noinline nounwind uwtable -->
+  <Function linkage="" mode="define" returnType="i32" name="arr">
+    <Arguments number="1">
+      <Arg type="i32" name="i"/>
+    </Arguments>
+    <BasicBlocks>
+      <BasicBLock name="entry">
+        <Instruction des="i.addr" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="array" opName="alloca"  allocaType="[10 x i32]" align="16" />
+        <Instruction opName="store" operands="[i32]i,[i32*]i.addr" />
+        <Instruction des="r-0" opName="bitcast" [[10 x i32]*]array to i8* />
+        <Instruction opName="call" functionType="void" operands="llvm.memcpy.p0i8.p0i8.i64, [i8*]r-0, [i8*]bitcast ([10 x i32]* arr.array to i8*), [i64]40, [i32]16, [i1]false" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="i.addr" />
+        <Instruction des="idxprom" opName="sext" [i32]r-1 to i64 />
+        <Instruction des="arrayidx" opName="getelementptr" inbounds [10 x i32], operands="[[10 x i32]*]array,[i64]0,[i64]idxprom" />
+        <Instruction des="r-2" opName="load" loadType="i32" type="i32*" operands="arrayidx" />
+        <Instruction opName="ret" operands="[i32]r-2" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+  <!-- Function Attrs: argmemonly nounwind -->
+  <Function linkage="" mode="declare"  returnType="void" name="llvm.memcpy.p0i8.p0i8.i64">
+    <Arguments number="5">
+    </Arguments>
+
+  </Function>
+
+  <!-- Function Attrs: noinline nounwind uwtable -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBLock name="entry">
+        <Instruction des="retval" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction opName="store" operands="[i32]0,[i32*]retval" />
+        <Instruction des="call" opName="call" functionType="i32" operands="arr, [i32]5" />
+        <Instruction opName="ret" operands="[i32]call" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

@@ -3,16 +3,16 @@
 # Target triple: x86_64-unknown-linux-gnu
 [Function:arr](i ){
     [BasicBlock](entry){
-        [Instruction](0x1d5a0f8) : alloca	: var(i.addr), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x1d5a318) : alloca	: var(array), /*=*//* size = 16,15*/ int(1)
-        [Instruction](0x1d5a3a0) : store	: var(i), var(i.addr)
-        [Instruction](0x1d5a408) : bitcast	: ptr(0x1d5a408), var(array)
-        [Instruction](0x1d5a4e0) : call	: ptr(0x1d5a408),const failed/*0x1d5bdd8*/, int(40), int(16), int(0), var(llvm.memcpy.p0i8.p0i8.i64)
-        [Instruction](0x1d5a558) : load	: ptr(0x1d5a558), var(i.addr)
-        [Instruction](0x1d5a5b8) : sext	: var(idxprom), /*=*/ ptr(0x1d5a558)
-        [Instruction](0x1d59cf8) : getelementptr	: var(arrayidx), /*=*/ var(array), int(0), var(idxprom)
-        [Instruction](0x1d59d68) : load	: ptr(0x1d59d68), var(arrayidx)
-        [Instruction](0x1d59dc8) : ret	: ptr(0x1d59d68)
+        [Instruction](0x1e3a0f8) : alloca	: var(i.addr), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x1e3a318) : alloca	: var(array), /*=*//* size = 16,15*/ int(1)
+        [Instruction](0x1e3a3a0) : store	: var(i), var(i.addr)
+        [Instruction](0x1e3a408) : bitcast	: ptr(0x1e3a408), var(array)
+        [Instruction](0x1e3a4e0) : call	: ptr(0x1e3a408),const failed/*0x1e3bdd8*/, int(40), int(16), int(0), var(llvm.memcpy.p0i8.p0i8.i64)
+        [Instruction](0x1e3a558) : load	: ptr(0x1e3a558), var(i.addr)
+        [Instruction](0x1e3a5b8) : sext	: var(idxprom), /*=*/ ptr(0x1e3a558)
+        [Instruction](0x1e39cf8) : getelementptr	: var(arrayidx), /*=*/ var(array), int(0), var(idxprom)
+        [Instruction](0x1e39d68) : load	: ptr(0x1e39d68), var(arrayidx)
+        [Instruction](0x1e39dc8) : ret	: ptr(0x1e39d68)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]
@@ -22,10 +22,10 @@
 #======================================================
 [Function:main](){
     [BasicBlock](entry){
-        [Instruction](0x1d5a2a8) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x1d5c9d0) : store	: int(0), var(retval)
-        [Instruction](0x1d5ca50) : call	: var(call), /*=*/ int(5), var(arr)
-        [Instruction](0x1d5cac8) : ret	: var(call)
+        [Instruction](0x1e3a2a8) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x1e3c9d0) : store	: int(0), var(retval)
+        [Instruction](0x1e3ca50) : call	: var(call), /*=*/ int(5), var(arr)
+        [Instruction](0x1e3cac8) : ret	: var(call)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]
