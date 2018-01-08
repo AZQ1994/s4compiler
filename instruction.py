@@ -8,7 +8,7 @@ class Instruction:
 		#self.label = ""
 		self.instrFormat = config.getInstrFormat()
 		if self.instrFormat.has_key(instrStr):
-			self.str = self.instrFormat[instrStr].format(*params)
+			pass#self.str = self.instrFormat[instrStr].format(*params)
 		self.comment = comment
 	def update(self, i, p):
 		self.params[i] = p
