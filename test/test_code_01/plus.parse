@@ -1,52 +1,52 @@
 # Successfully read Module:
-# Name: test/test_code_01/plus.bc
+# Name: test_code_01/plus.bc
 # Target triple: x86_64-unknown-linux-gnu
 [Function:plus](a ){
     [BasicBlock](entry){
-        [Instruction](0x2a45ca8) : alloca	: var(a.addr), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x2a44778) : alloca	: var(res), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x2a447e8) : alloca	: var(i), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x2a44870) : store	: var(a), var(a.addr)
-        [Instruction](0x2a448f0) : store	: int(0), var(res)
-        [Instruction](0x2a441a0) : store	: int(0), var(i)
-        [Instruction](0x2a44208) : br	: var(for.cond)
+        [Instruction](0x2a67c98) : alloca	: var(a.addr), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2a66768) : alloca	: var(res), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2a667d8) : alloca	: var(i), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2a66860) : store	: var(a), var(a.addr)
+        [Instruction](0x2a668e0) : store	: int(0), var(res)
+        [Instruction](0x2a66190) : store	: int(0), var(i)
+        [Instruction](0x2a661f8) : br	: var(for.cond)
     }[BasicBlock]
 #------------------------------------------------------
     [BasicBlock](for.cond){
-        [Instruction](0x2a44268) : load	: ptr(0x2a44268), var(i)
-        [Instruction](0x2a446a8) : load	: ptr(0x2a446a8), var(a.addr)
-        [Instruction](0x2a44470) : icmp_slt	: var(cmp), /*=*/ ptr(0x2a44268), ptr(0x2a446a8)
-        [Instruction](0x2a40da8) : br	: var(cmp), var(for.end), var(for.body)
+        [Instruction](0x2a66258) : load	: ptr(0x2a66258), var(i)
+        [Instruction](0x2a66698) : load	: ptr(0x2a66698), var(a.addr)
+        [Instruction](0x2a66460) : icmp_slt	: var(cmp), /*=*/ ptr(0x2a66258), ptr(0x2a66698)
+        [Instruction](0x2a62d98) : br	: var(cmp), var(for.end), var(for.body)
     }[BasicBlock]
 #------------------------------------------------------
     [BasicBlock](for.body){
-        [Instruction](0x2a40e08) : load	: ptr(0x2a40e08), var(i)
-        [Instruction](0x2a40e68) : load	: ptr(0x2a40e68), var(res)
-        [Instruction](0x2a444f0) : add	: var(add), /*=*/ ptr(0x2a40e68), ptr(0x2a40e08)
-        [Instruction](0x2a40ee0) : store	: var(add), var(res)
-        [Instruction](0x2a40f48) : br	: var(for.inc)
+        [Instruction](0x2a62df8) : load	: ptr(0x2a62df8), var(i)
+        [Instruction](0x2a62e58) : load	: ptr(0x2a62e58), var(res)
+        [Instruction](0x2a664e0) : add	: var(add), /*=*/ ptr(0x2a62e58), ptr(0x2a62df8)
+        [Instruction](0x2a62ed0) : store	: var(add), var(res)
+        [Instruction](0x2a62f38) : br	: var(for.inc)
     }[BasicBlock]
 #------------------------------------------------------
     [BasicBlock](for.inc){
-        [Instruction](0x2a40fa8) : load	: ptr(0x2a40fa8), var(i)
-        [Instruction](0x2a41020) : add	: var(inc), /*=*/ ptr(0x2a40fa8), int(1)
-        [Instruction](0x2a410a0) : store	: var(inc), var(i)
-        [Instruction](0x2a41108) : br	: var(for.cond)
+        [Instruction](0x2a62f98) : load	: ptr(0x2a62f98), var(i)
+        [Instruction](0x2a63010) : add	: var(inc), /*=*/ ptr(0x2a62f98), int(1)
+        [Instruction](0x2a63090) : store	: var(inc), var(i)
+        [Instruction](0x2a630f8) : br	: var(for.cond)
     }[BasicBlock]
 #------------------------------------------------------
     [BasicBlock](for.end){
-        [Instruction](0x2a41168) : load	: ptr(0x2a41168), var(res)
-        [Instruction](0x2a411c8) : ret	: ptr(0x2a41168)
+        [Instruction](0x2a63158) : load	: ptr(0x2a63158), var(res)
+        [Instruction](0x2a631b8) : ret	: ptr(0x2a63158)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]
 #======================================================
 [Function:main](){
     [BasicBlock](entry){
-        [Instruction](0x2a46e08) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x2a46e90) : store	: int(0), var(retval)
-        [Instruction](0x2a46f10) : call	: var(call), /*=*/ int(100), var(plus)
-        [Instruction](0x2a46f88) : ret	: var(call)
+        [Instruction](0x2a68df8) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x2a68e80) : store	: int(0), var(retval)
+        [Instruction](0x2a68f00) : call	: var(call), /*=*/ int(100), var(plus)
+        [Instruction](0x2a68f78) : ret	: var(call)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]

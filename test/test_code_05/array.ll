@@ -1,5 +1,5 @@
-; ModuleID = 'array.c'
-source_filename = "array.c"
+; ModuleID = 'test/test_code_05/array.c'
+source_filename = "test/test_code_05/array.c"
 target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 

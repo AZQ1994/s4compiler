@@ -2740,7 +2740,7 @@ void AssemblyWriter::printArgument(const Argument *Arg,
 /// printBasicBlock - This member is called for each basic block in a method.
 ///
 void AssemblyWriter::printBasicBlock(const BasicBlock *BB) {
-  Out << INDENT.push() << "<BasicBLock";
+  Out << INDENT.push() << "<BasicBlock";
   if (BB->hasName()) {              // Print out the label if it exists...
     //Out << "\n";
     //PrintLLVMName(Out, BB->getName(), LabelPrefix);
