@@ -1,0 +1,65 @@
+<Module>
+  <!-- ; ModuleID = 'test_code_04/fib.o0.bc' -->
+  <!-- source_filename = " fib.c  "-->
+  <!-- target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128" -->
+  <!-- target triple = "x86_64-unknown-linux-gnu" -->
+
+  <!-- Function Attrs: noinline nounwind uwtable -->
+  <Function linkage="" mode="define" returnType="i32" name="fib">
+    <Arguments number="1">
+      <Arg type="i32" name="a"/>
+    </Arguments>
+    <BasicBlocks>
+      <BasicBLock name="entry">
+        <Instruction des="retval" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="a.addr" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction opName="store" operands="[i32]a,[i32*]a.addr" />
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="a.addr" />
+        <Instruction opName="switch" [i32]r-0, [label]sw.default [
+    [i32]0, [label]sw.bb
+    [i32]1, [label]sw.bb1
+  ] />
+      </BasicBlock>
+      <BasicBLock name="sw.bb">
+        <Instruction opName="store" operands="[i32]0,[i32*]retval" />
+        <Instruction opName="br" type="label" operands="return" />
+      </BasicBlock>
+      <BasicBLock name="sw.bb1">
+        <Instruction opName="store" operands="[i32]1,[i32*]retval" />
+        <Instruction opName="br" type="label" operands="return" />
+      </BasicBlock>
+      <BasicBLock name="sw.default">
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="a.addr" />
+        <Instruction des="sub" opName="sub" nsw type="i32" operands="r-1,2" />
+        <Instruction des="call" opName="call" functionType="i32" operands="fib, [i32]sub" />
+        <Instruction des="r-2" opName="load" loadType="i32" type="i32*" operands="a.addr" />
+        <Instruction des="sub2" opName="sub" nsw type="i32" operands="r-2,1" />
+        <Instruction des="call3" opName="call" functionType="i32" operands="fib, [i32]sub2" />
+        <Instruction des="add" opName="add" nsw type="i32" operands="call,call3" />
+        <Instruction opName="store" operands="[i32]add,[i32*]retval" />
+        <Instruction opName="br" type="label" operands="return" />
+      </BasicBlock>
+      <BasicBLock name="return">
+        <Instruction des="r-3" opName="load" loadType="i32" type="i32*" operands="retval" />
+        <Instruction opName="ret" operands="[i32]r-3" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+  <!-- Function Attrs: noinline nounwind uwtable -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBLock name="entry">
+        <Instruction des="retval" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="a" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction opName="store" operands="[i32]0,[i32*]retval" />
+        <Instruction opName="store" operands="[i32]10,[i32*]a" />
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="a" />
+        <Instruction des="call" opName="call" functionType="i32" operands="fib, [i32]r-0" />
+        <Instruction opName="ret" operands="[i32]call" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>
