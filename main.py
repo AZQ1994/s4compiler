@@ -22,7 +22,7 @@ class analyze:
 	First, turn all instructions into objects with arguments object
 	
 	"""
-	def __init__(self, functions):
+	def __init__(self, filename):
 		"""
 		label_next = []
 		self.startNode = ListNode("start", sys = True)
@@ -99,7 +99,7 @@ class analyze:
 		#self.printNodes()
 		#self.WM.dataMem()
 		"""
-		self.startNode, self.endNode, self.LM, self.WM = CodeParser2().parse("test/test_code_01/plus.xml")
+		self.startNode, self.endNode, self.LM, self.WM = CodeParser2().parse(filename)
 	def printNodes(self):
 		current = self.startNode
 		while current != None:
@@ -192,13 +192,13 @@ class analyze:
 #print "***************"
 #print p.functions
 #print "***************"
-a = analyze("test/test_code_05/array.parse")
+a = analyze("test/test_code_05/array.xml")
 a.printNodes()
 print "***************"
 a.convert()
 print "***************"
-a.opt_label()
-a.opt_variable_name()
+#a.opt_label()
+#a.opt_variable_name()
 a.printNodes()
 
 a.WM.dataMem()

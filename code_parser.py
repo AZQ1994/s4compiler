@@ -92,6 +92,15 @@ class CodeParser2(object):
 		for item1 in module:
 			# functions and global variables
 			print "- ",item1.tag,": ",item1.attrib
+			if item1.tag == "Globals":
+				for V in item1:
+					print V
+					if V.get("type").find("x") != -1:
+						arr = V.get("init")[1:-1]
+						values = [s.split(" ")[1] for s in arr.split(", ")]
+						WM.addWords(values, V.get("name").replace(".","_"))
+				continue
+
 			if item1.tag == "Function":
 				
 				label_next.append(WM.getNamespace()+item1.get('name').replace(".","_"))
@@ -143,7 +152,6 @@ class CodeParser2(object):
 						#print params
 					WM.popNamespace()
 				WM.popNamespace()
-
 
 		return startNode, endNode, LM, WM
 

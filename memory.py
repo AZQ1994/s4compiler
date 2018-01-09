@@ -137,8 +137,10 @@ class Words(object):
 	def __init__(self, values, manager, name):
 		self.words = []
 		self.manager = manager
+		self.name = name
 		for i, v in enumerate(values):
-			self.words.append( self.manager.addDataWord(v, name+"-"+i, type_="data-words") )
+			self.words.append( self.manager.addDataWord(v, name+"-"+str(i), type_="data-words") )
+
 
 	def getStr(self):
 		return "\n".join([str(w) for w in self.words])
@@ -332,10 +334,10 @@ class WordManager(object):
 
 	def dataMem(self):
 		for key, value in self.wordDataDict.items():
-			if type(value) == Word:
+			if type(value) == Word and value.getType() != "data-words":
 				print value
 			if type(value) == Words:
-				print value.getStr()
+				print value.name+": "+value.getStr()
 		if(self.hasFlag("stack")):
 			pass
 	def stackMem(self):
