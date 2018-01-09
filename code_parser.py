@@ -126,13 +126,20 @@ class CodeParser2(object):
 						else:
 							append_node = append_node.append(LM.new(ListNode(ins)))
 						
-						if False:#append_node.ins.instrStr in build_methods:
+						if append_node.ins.instrStr in build_methods:
 							params = build_methods[append_node.ins.instrStr](append_node.ins.params, WM)
 						else:
 							params = []
 							for x in append_node.ins.params:
+								if check_int(x):
+									params.append(WM.const(x))
+									continue
+								else:
+									params.append(WM.getName(x))
+									continue
 								params.append(x)
 						#append_node.ins.updateAll(params)
+						append_node.ins.params=params
 						#print params
 					WM.popNamespace()
 				WM.popNamespace()
@@ -144,7 +151,10 @@ class CodeParser2(object):
 	def parseLine(self, line):
 		pass
 """
-
+def check_int(s):
+    if s[0] in ('-', '+'):
+        return s[1:].isdigit()
+    return s.isdigit()
 #test
 
 startNode, endNode, LM, WM = CodeParser2().parse("test/test_code_01/plus.xml")

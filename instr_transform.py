@@ -23,83 +23,52 @@ ListNode
 
 """
 import re
-
+def check_int(s):
+    if s[0] in ('-', '+'):
+        return s[1:].isdigit()
+    return s.isdigit()
+    
 def build_br(ins_params, WM):
 	params = []
 	if len(ins_params)==1:
-		p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[0])
-		if len(p_var) == 1:
-			word = WM.label(WM.getUpperNamespace()+p_var[0].replace(".","_"))
-			params.append(word)
-			return params
+		word = WM.label(WM.getUpperNamespace()+ins_params[0])
+		params.append(word)
+		return params
+
 	# ins_params[0]
-	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[0])
-	if len(p_var) == 1:
-		word = WM.getName(p_var[0].replace(".","_"))
-		params.append(word)
-	
-	p_int = re.findall(r'int\(([\s\S]*?)\)', ins_params[0])
-	if len(p_int) == 1:
-		word = WM.const(p_int[0])
-		params.append(word)
-	
-	p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', ins_params[0])
-	if len(p_ptr) == 1:
-		word = WM.getName("p_"+p_ptr[0])
-		params.append(word)
+	if check_int(ins_params[0]):
+		params.append(WM.const(ins_params[0]))
+	else:
+		params.append(WM.getName(ins_params[0]))
+
 	# ins_params[1]
-	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[1])
-	if len(p_var) == 1:
-		word = WM.label(WM.getUpperNamespace()+p_var[0].replace(".","_"))
-		params.append(word)
+	word = WM.label(WM.getUpperNamespace()+ins_params[1])
+	params.append(word)
 	# ins_params[2]
-	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[2])
-	if len(p_var) == 1:
-		word = WM.label(WM.getUpperNamespace()+p_var[0].replace(".","_"))
-		params.append(word)
+	word = WM.label(WM.getUpperNamespace()+ins_params[2])
+	params.append(word)
 	return params
+
 def build_call(ins_params, WM):
 	call_params = []
 	params = []
 
-	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[0])
-	if len(p_var) == 1:
-		word = WM.getName(p_var[0].replace(".","_"))
-		params.append(word)
-	p_int = re.findall(r'int\(([\s\S]*?)\)', ins_params[0])
-	if len(p_int) == 1:
-		word = WM.const(p_int[0])
-		params.append(word)
-	p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', ins_params[0])
-	if len(p_ptr) == 1:
-		word = WM.getName("p_"+p_ptr[0])
-		params.append(word)
+	if check_int(ins_params[0]):
+		params.append(WM.const(ins_params[0]))
+	else:
+		params.append(WM.getName(ins_params[0]))
 
-	for x in ins_params[1:-1]:
-		p_var = re.findall(r'var\(([\s\S]*?)\)', x)
-		if len(p_var) == 1:
-			word = WM.getName(p_var[0].replace(".","_"))
-			call_params.append(word)
-			#print "test::::::::", word
-			#### TODO : check
+	for x in ins_params[2:]:
+		if check_int(x):
+			call_params.append(WM.const(x))
 			continue
-		p_int = re.findall(r'int\(([\s\S]*?)\)', x)
-		if len(p_int) == 1:
-			word = WM.const(p_int[0])
-			call_params.append(word)
-			#print "int",p_int[0]
+		else:
+			call_params.append(WM.getName(x))
 			continue
-		p_ptr = re.findall(r'ptr\(([\s\S]*?)\)', x)
-		if len(p_ptr) == 1:
-			word = WM.getName("p_"+p_ptr[0])
-			call_params.append(word)
-			continue
-		call_params.append(x)
 	params.append(call_params)
-	p_var = re.findall(r'var\(([\s\S]*?)\)', ins_params[-1])
-	if len(p_var) == 1:
-		word = WM.label(WM.getUpperNamespace(2)+p_var[0].replace(".","_"))
-		params.append(word)
+	
+	word = WM.label(WM.getUpperNamespace(2)+ins_params[1])
+	params.append(word)
 
 	return params
 

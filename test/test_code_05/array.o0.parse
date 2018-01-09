@@ -1,31 +1,30 @@
 # Successfully read Module:
-# Name: test/test_code_05/array.o0.bc
-# Target triple: x86_64-unknown-linux-gnu
+# Name: test_code_05/array.o0.bc
+# Target triple: nvptx
 [Function:arr](i ){
     [BasicBlock](entry){
-        [Instruction](0x1e3a0f8) : alloca	: var(i.addr), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x1e3a318) : alloca	: var(array), /*=*//* size = 16,15*/ int(1)
-        [Instruction](0x1e3a3a0) : store	: var(i), var(i.addr)
-        [Instruction](0x1e3a408) : bitcast	: ptr(0x1e3a408), var(array)
-        [Instruction](0x1e3a4e0) : call	: ptr(0x1e3a408),const failed/*0x1e3bdd8*/, int(40), int(16), int(0), var(llvm.memcpy.p0i8.p0i8.i64)
-        [Instruction](0x1e3a558) : load	: ptr(0x1e3a558), var(i.addr)
-        [Instruction](0x1e3a5b8) : sext	: var(idxprom), /*=*/ ptr(0x1e3a558)
-        [Instruction](0x1e39cf8) : getelementptr	: var(arrayidx), /*=*/ var(array), int(0), var(idxprom)
-        [Instruction](0x1e39d68) : load	: ptr(0x1e39d68), var(arrayidx)
-        [Instruction](0x1e39dc8) : ret	: ptr(0x1e39d68)
+        [Instruction](0x198de28) : alloca	: var(i.addr), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x198de98) : alloca	: var(array), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x198df20) : store	: var(i), var(i.addr)
+        [Instruction](0x198df88) : bitcast	: ptr(0x198df88), var(array)
+        [Instruction](0x198e410) : call	: ptr(0x198df88),const failed/*0x1990078*/, int(40), int(4), int(0), var(llvm.memcpy.p0i8.p0i8.i32)
+        [Instruction](0x198e488) : load	: ptr(0x198e488), var(i.addr)
+        [Instruction](0x198e518) : getelementptr	: var(arrayidx), /*=*/ var(array), int(0), ptr(0x198e488)
+        [Instruction](0x198e898) : load	: ptr(0x198e898), var(arrayidx)
+        [Instruction](0x198dfe8) : ret	: ptr(0x198e898)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]
 #======================================================
-[Function:llvm.memcpy.p0i8.p0i8.i64](     ){
+[Function:llvm.memcpy.p0i8.p0i8.i32](     ){
 }[Function]
 #======================================================
 [Function:main](){
     [BasicBlock](entry){
-        [Instruction](0x1e3a2a8) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
-        [Instruction](0x1e3c9d0) : store	: int(0), var(retval)
-        [Instruction](0x1e3ca50) : call	: var(call), /*=*/ int(5), var(arr)
-        [Instruction](0x1e3cac8) : ret	: var(call)
+        [Instruction](0x198e048) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x1990c00) : store	: int(0), var(retval)
+        [Instruction](0x1990c80) : call	: var(call), /*=*/ int(5), var(arr)
+        [Instruction](0x1990cf8) : ret	: var(call)
     }[BasicBlock]
 #------------------------------------------------------
 }[Function]

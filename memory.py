@@ -133,7 +133,32 @@ class Word(object):
 		if type(self.value) is Word and self.value.type == "label":
 			return label + "&" + str(self.value)
 		return label + str(self.value) #+ "("+self.type+")"
+class Words(object):
+	def __init__(self, values, manager, name):
+		self.words = []
+		self.manager = manager
+		for i, v in enumerate(values):
+			self.words.append( self.manager.addDataWord(v, name+"-"+i, type_="data-words") )
 
+	def getStr(self):
+		return "\n".join([str(w) for w in self.words])
+
+	def getPtr(self):
+		if len(self.words != 0):
+			return self.words[0].getPtr
+		return 
+
+	def __str__(self):
+		if len(self.words) != 0:
+			return str(self.words[0])
+		else:
+			return "// empty words"
+	def __repr__(self):
+		if len(self.words) != 0:
+			return str(self.words[0])
+		else:
+			return "// empty words"
+		
 class WordManager(object):
 	"""
 	wordPtrDict			
@@ -226,13 +251,28 @@ class WordManager(object):
 	def deletePtrWord(word_id):
 		return self.wordPtrDict.pop(word_id)
 
-	def addDataWord(self, value, label, namespace=True):
+	def addWords(self, values, label, namespace=True):
 		if namespace:
 			label = self.getNamespace() + label
 		while self.wordDataDict.has_key(label) or self.wordDataPtrDict.has_key(label):
 			l = label.split("-")
-			label = l[0] + "-" + ("1" if len(l)==1 else str(int(l[1])+1))
-		self.wordDataDict[label] = Word("data", value, self, label)
+			if len(l) == 1:
+				label = l[0] + "-1"
+			else:
+				label = "-".join(l[:-1]) + "-" + str(int(l[1])+1)
+		self.wordDataDict[label] = Words(values, self, label)
+		return self.wordDataDict[label]
+
+	def addDataWord(self, value, label, namespace=True, type_="data"):
+		if namespace:
+			label = self.getNamespace() + label
+		while self.wordDataDict.has_key(label) or self.wordDataPtrDict.has_key(label):
+			l = label.split("-")
+			if len(l) == 1:
+				label = l[0] + "-1"
+			else:
+				label = "-".join(l[:-1]) + "-" + str(int(l[1])+1)
+		self.wordDataDict[label] = Word(type_, value, self, label)
 		if type(value) == Word:
 			self.addrDict[label] = value
 		return self.wordDataDict[label]
@@ -241,7 +281,10 @@ class WordManager(object):
 			label = self.getNamespace() + label
 		while self.wordDataDict.has_key(label) or self.wordDataPtrDict.has_key(label):
 			l = label.split("-")
-			label = l[0] + "-" + ("1" if len(l)==1 else str(int(l[1])+1))
+			if len(l) == 1:
+				label = l[0] + "-1"
+			else:
+				label = "-".join(l[:-1]) + "-" + str(int(l[1])+1)
 		word = Word("data-ptr", value, self, label)
 		self.wordDataPtrDict[label] = word
 		return word
@@ -279,7 +322,7 @@ class WordManager(object):
 
 		if type(name) == Label:
 			name = name.name
-		print type(name)
+		#print type(name)
 		l = Word("label", name, self)
 		if self.labelDict.has_key(name):
 			self.labelDict[name].append(l)
@@ -291,6 +334,8 @@ class WordManager(object):
 		for key, value in self.wordDataDict.items():
 			if type(value) == Word:
 				print value
+			if type(value) == Words:
+				print value.getStr()
 		if(self.hasFlag("stack")):
 			pass
 	def stackMem(self):

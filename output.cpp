@@ -1028,6 +1028,7 @@ static void writeAtomicRMWOperation(raw_ostream &Out,
 }
 
 static void WriteOptimizationInfo(raw_ostream &Out, const User *U) {
+  /*////////////////////////////////TODO
   if (const FPMathOperator *FPO = dyn_cast<const FPMathOperator>(U)) {
     // Unsafe algebra implies all the others, no need to write them all out
     if (FPO->hasUnsafeAlgebra())
@@ -1057,7 +1058,7 @@ static void WriteOptimizationInfo(raw_ostream &Out, const User *U) {
   } else if (const GEPOperator *GEP = dyn_cast<GEPOperator>(U)) {
     if (GEP->isInBounds())
       Out << " inbounds";
-  }
+  }*/
 }
 
 static void WriteConstantInternal(raw_ostream &Out, const Constant *CV,
@@ -2255,10 +2256,12 @@ void AssemblyWriter::printModule(const Module *M) {
   }
 
   // Output all globals.
-  if (!M->global_empty()) Out << '\n';
+  //if (!M->global_empty()) Out << '\n';
+  Out << INDENT.push() << "<Globals>\n";
   for (const GlobalVariable &GV : M->globals()) {
     printGlobal(&GV); Out << '\n';
   }
+  Out << INDENT.pop() << "</Globals>\n";
 
   // Output all aliases.
   if (!M->alias_empty()) Out << "\n";
@@ -2437,45 +2440,52 @@ void AssemblyWriter::printGlobal(const GlobalVariable *GV) {
   if (GV->isMaterializable())
     Out << "<!--; Materializable -->\n";
 
+  Out << INDENT.get() << "<Variable name=\"";
   WriteAsOperandInternal(Out, GV, &TypePrinter, &Machine, GV->getParent());
-  Out << " = ";
+  Out << "\"";
 
   if (!GV->hasInitializer() && GV->hasExternalLinkage())
     Out << "external ";
 
-  Out << getLinkagePrintName(GV->getLinkage());
+  // TODO //Out << getLinkagePrintName(GV->getLinkage());
   PrintVisibility(GV->getVisibility(), Out);
   PrintDLLStorageClass(GV->getDLLStorageClass(), Out);
   PrintThreadLocalModel(GV->getThreadLocalMode(), Out);
+  /* TODO
   StringRef UA = getUnnamedAddrEncoding(GV->getUnnamedAddr());
   if (!UA.empty())
       Out << UA << ' ';
+  */
 
   if (unsigned AddressSpace = GV->getType()->getAddressSpace())
     Out << "addrspace(" << AddressSpace << ") ";
   if (GV->isExternallyInitialized()) Out << "externally_initialized ";
-  Out << (GV->isConstant() ? "constant " : "global ");
+  Out << (GV->isConstant() ? " Vtype=\"constant\"" : " Vtype=\"global\"");
+  Out << " type=\"";
   TypePrinter.print(GV->getValueType(), Out);
+  Out << "\"";
 
   if (GV->hasInitializer()) {
-    Out << ' ';
+    Out << " init=\"";
     writeOperand(GV->getInitializer(), false);
+    Out << "\"";
   }
 
-  if (GV->hasSection()) {
+  if (GV->hasSection()) {//TODO
     Out << ", section \"";
     PrintEscapedString(GV->getSection(), Out);
     Out << '"';
   }
-  maybePrintComdat(Out, *GV);
+  maybePrintComdat(Out, *GV);//TODO
   if (GV->getAlignment())
-    Out << ", align " << GV->getAlignment();
+    Out << " align=\"" << GV->getAlignment() << "\"";
 
   SmallVector<std::pair<unsigned, MDNode *>, 4> MDs;
   GV->getAllMetadata(MDs);
   printMetadataAttachments(MDs, ", ");
 
   printInfoComment(*GV);
+  Out << " />";
 }
 
 void AssemblyWriter::printIndirectSymbol(const GlobalIndirectSymbol *GIS) {
@@ -3139,9 +3149,9 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
     TypePrinter.print(I.getType(), Out);
   } else if (Operand) {   // Print the normal way.
     if (const auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
-      Out << ' ';
+      Out << " type=\"";
       TypePrinter.print(GEP->getSourceElementType(), Out);
-      Out << ',';
+      Out << "\"";
     } else if (const auto *LI = dyn_cast<LoadInst>(&I)) {
       Out << " loadType=\"";
       TypePrinter.print(LI->getType(), Out);
@@ -3208,10 +3218,10 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
   // Print Metadata info.
   SmallVector<std::pair<unsigned, MDNode *>, 4> InstMD;
   I.getAllMetadata(InstMD);
-  printMetadataAttachments(InstMD, ", ");
+  //printMetadataAttachments(InstMD, ", ");
 
   // Print a nice comment.
-  printInfoComment(I);
+  //printInfoComment(I);
   Out << " />";
 }
 

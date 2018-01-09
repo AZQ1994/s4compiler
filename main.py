@@ -8,7 +8,7 @@ from list_node import ListNode
 #from subneg4_list_node import Subneg4ListNode
 from label import LabelManager
 from label import Label
-from code_parser import CodeParser
+from code_parser import CodeParser2
 
 import re
 
@@ -23,6 +23,7 @@ class analyze:
 	
 	"""
 	def __init__(self, functions):
+		"""
 		label_next = []
 		self.startNode = ListNode("start", sys = True)
 		self.endNode = ListNode("end", sys = True)
@@ -97,6 +98,8 @@ class analyze:
 			self.WM.popNamespace()
 		#self.printNodes()
 		#self.WM.dataMem()
+		"""
+		self.startNode, self.endNode, self.LM, self.WM = CodeParser2().parse("test/test_code_01/plus.xml")
 	def printNodes(self):
 		current = self.startNode
 		while current != None:
@@ -178,18 +181,18 @@ class analyze:
 #p = CodeParser("test/test_code_03/mult.o2.parse")
 #p = CodeParser("test/test_code_01/plus.parse")
 #p = CodeParser("test/test_code_04/test.parse")
-p = CodeParser("test/test_code_04/fib.parse")
+#p = CodeParser("test/test_code_04/fib.parse")
 #p = CodeParser("test/test_code_03/main.parse")
 #p = CodeParser("test/presentation_20171120/main.parse")
 
-p.parse()
-p.printModule()
+#p.parse()
+#p.printModule()
 #for x in p.readRaw():
 #	print x
-print "***************"
-print p.functions
-print "***************"
-a = analyze(p.functions)
+#print "***************"
+#print p.functions
+#print "***************"
+a = analyze("test/test_code_05/array.parse")
 a.printNodes()
 print "***************"
 a.convert()
