@@ -4,6 +4,7 @@ from list_node import ListNode
 from label import LabelManager
 from memory import WordManager
 from instr_transform import build_methods
+"""
 class CodeParser:
 	def __init__(self, filename = None):
 		self.setFile(filename)
@@ -69,6 +70,7 @@ class CodeParser:
 		self.fullText = re.sub(r'\/\*[\S\s]*?\*\/|\/\/[\S\s]*?[\n\r]|\#[\S\s]*?[\r\n]','',self.fullText)
 		#self.fullText = re.sub(r'\/\/[\S\s]*?[\n\r]|\#[\S\s]*?[\r\n]','',self.fullText)
 		#self.fullText = re.sub(r'\/\*[\S\s]*?\*\/','',self.fullText)
+"""
 import xml.etree.ElementTree as ET
 class CodeParser2(object):
 
@@ -125,7 +127,7 @@ class CodeParser2(object):
 					for I in BB: # instruction
 						############### des + params TODO
 						ins_name = I.get("opName")
-						ins_params = [] if I.get("operands") == None else re.sub(r'\[.*?\]','', I.get("operands")).replace(" ","").replace(".","_").split(",")##################TODO
+						ins_params = [] if I.get("operands") == None else re.sub(r'\[.*?(\[.*?\])?.*?\]','', I.get("operands")).replace(" ","").replace(".","_").split(",")##################TODO
 						ins_des = None if I.get("des") == None else I.get("des").replace(".","_")
 						ins = Instruction(ins_name, [ins_des]+ins_params if ins_des != None else ins_params)
 
@@ -163,15 +165,19 @@ def check_int(s):
     if s[0] in ('-', '+'):
         return s[1:].isdigit()
     return s.isdigit()
-#test
 
-startNode, endNode, LM, WM = CodeParser2().parse("test/test_code_01/plus.xml")
+
+###### test
+
+startNode, endNode, LM, WM = CodeParser2().parse("test/test_code_bubble_sort/bubble.xml")
 
 current = startNode
 while current != None:
 	print current
 	current = current.next
 
+WM.dataMem()
+WM.stackMem()
 """
 tree = ET.parse('test/test_code_01/plus.xml')
 module = tree.getroot()

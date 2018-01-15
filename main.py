@@ -192,7 +192,7 @@ class analyze:
 #print "***************"
 #print p.functions
 #print "***************"
-a = analyze("test/test_code_05/array.xml")
+a = analyze("test/test_code_bubble_sort/bubble.o0.xml")
 a.printNodes()
 print "***************"
 a.convert()

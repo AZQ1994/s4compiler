@@ -27,7 +27,12 @@ def check_int(s):
     if s[0] in ('-', '+'):
         return s[1:].isdigit()
     return s.isdigit()
-    
+
+def build_getelementptr(ins_params, WM):
+	params = []
+	print "::::::::::::::::::::",ins_params
+	return params
+
 def build_br(ins_params, WM):
 	params = []
 	if len(ins_params)==1:
@@ -75,6 +80,7 @@ def build_call(ins_params, WM):
 build_methods={
 	"br":build_br,
 	"call":build_call,
+	"getelementptr":build_getelementptr
 }
 
 def trans_alloca(LN, WM, LM):

@@ -1,0 +1,134 @@
+# Successfully read Module:
+# Name: test/test_code_bubble_sort/bubble.bc
+# Target triple: nvptx
+[Function:main](){
+    [BasicBlock](entry){
+        [Instruction](0x1a57c38) : load	: ptr(0x1a57c38), var(len)
+        [Instruction](0x1a5c9e0) : icmp_sgt	: var(cmp31), /*=*/ ptr(0x1a57c38), int(0)
+        [Instruction](0x1a5ca78) : br	: var(cmp31), var(for.end14), var(for.cond1.preheader.preheader)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond1.preheader.preheader){
+        [Instruction](0x1a5caf0) : add	: var(j.027), /*=*/ ptr(0x1a57c38), int(-1)
+        [Instruction](0x1a5cb70) : add	: ptr(0x1a5cb70), ptr(0x1a57c38), int(-2)
+        [Instruction](0x1a5cc08) : getelementptr	: var(arrayidx.prol), /*=*/ var(N), int(0), var(j.027)
+        [Instruction](0x1a5cc90) : add	: var(sub4.prol), /*=*/ ptr(0x1a57c38), int(-2)
+        [Instruction](0x1a5cd28) : getelementptr	: var(arrayidx5.prol), /*=*/ var(N), int(0), var(sub4.prol)
+        [Instruction](0x1a59f90) : add	: var(j.0.prol), /*=*/ ptr(0x1a57c38), int(-2)
+        [Instruction](0x1a5cd98) : br	: var(for.cond1.preheader)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond1.preheader){
+        [Instruction](0x1a59fe8) : phi	: var(i.032), /*=*/ var(inc), int(0)
+        [Instruction](0x1a5a070) : icmp_sgt	: var(cmp228), /*=*/ var(j.027), var(i.032)
+        [Instruction](0x1a5d848) : br	: var(cmp228), var(for.inc13), var(for.body3.preheader)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3.preheader){
+        [Instruction](0x1a5d8c0) : sub	: ptr(0x1a5d8c0), var(j.027), var(i.032)
+        [Instruction](0x1a5d940) : and	: var(xtraiter), /*=*/ ptr(0x1a5d8c0), int(1)
+        [Instruction](0x1a5d9c0) : icmp_eq	: var(lcmp.mod), /*=*/ var(xtraiter), int(0)
+        [Instruction](0x1a5da58) : br	: var(lcmp.mod), var(for.body3.prol.preheader), var(for.body3.prol.loopexit.unr-lcssa)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3.prol.preheader){
+        [Instruction](0x1a5dab8) : br	: var(for.body3.prol)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3.prol){
+        [Instruction](0x1a5df68) : load	: ptr(0x1a5df68), var(arrayidx.prol)
+        [Instruction](0x1a5dfc8) : load	: ptr(0x1a5dfc8), var(arrayidx5.prol)
+        [Instruction](0x1a5e040) : icmp_slt	: var(cmp6.prol), /*=*/ ptr(0x1a5df68), ptr(0x1a5dfc8)
+        [Instruction](0x1a5e0d8) : br	: var(cmp6.prol), var(for.cond1.backedge.prol), var(if.then.prol)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](if.then.prol){
+        [Instruction](0x1a5e150) : store	: ptr(0x1a5dfc8), var(arrayidx.prol)
+        [Instruction](0x1a5e1d0) : store	: ptr(0x1a5df68), var(arrayidx5.prol)
+        [Instruction](0x1a5e238) : br	: var(for.cond1.backedge.prol)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond1.backedge.prol){
+        [Instruction](0x1a5e298) : br	: var(for.body3.prol.loopexit.unr-lcssa)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3.prol.loopexit.unr-lcssa){
+        [Instruction](0x1a5e2e8) : phi	: var(j.030.unr.ph), /*=*/ var(j.0.prol), var(j.027)
+        [Instruction](0x1a5e398) : phi	: var(j.0.in29.unr.ph), /*=*/ var(j.027), ptr(0x1a57c38)
+        [Instruction](0x1a5e458) : br	: var(for.body3.prol.loopexit)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3.prol.loopexit){
+        [Instruction](0x1a5e4d0) : icmp_eq	: ptr(0x1a5e4d0), ptr(0x1a5cb70), var(i.032)
+        [Instruction](0x1a5e568) : br	: ptr(0x1a5e4d0), var(for.body3.preheader.new), var(for.inc13.loopexit)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3.preheader.new){
+        [Instruction](0x1a5e5c8) : br	: var(for.body3)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3){
+        [Instruction](0x1a5e618) : phi	: var(j.030), /*=*/ var(j.030.unr.ph), var(j.0.1)
+        [Instruction](0x1a5db58) : phi	: var(j.0.in29), /*=*/ var(j.0.in29.unr.ph), var(j.0)
+        [Instruction](0x1a5dc88) : getelementptr	: var(arrayidx), /*=*/ var(N), int(0), var(j.030)
+        [Instruction](0x1a5dcf8) : load	: ptr(0x1a5dcf8), var(arrayidx)
+        [Instruction](0x1a5dd70) : add	: var(sub4), /*=*/ var(j.0.in29), int(-2)
+        [Instruction](0x1a5de08) : getelementptr	: var(arrayidx5), /*=*/ var(N), int(0), var(sub4)
+        [Instruction](0x1a5de78) : load	: ptr(0x1a5de78), var(arrayidx5)
+        [Instruction](0x1a5def0) : icmp_slt	: var(cmp6), /*=*/ ptr(0x1a5dcf8), ptr(0x1a5de78)
+        [Instruction](0x1a5ef88) : br	: var(cmp6), var(for.cond1.backedge), var(if.then)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond1.backedge){
+        [Instruction](0x1a5f000) : add	: var(j.0), /*=*/ var(j.030), int(-1)
+        [Instruction](0x1a5f098) : getelementptr	: var(arrayidx.1), /*=*/ var(N), int(0), var(j.0)
+        [Instruction](0x1a5f108) : load	: ptr(0x1a5f108), var(arrayidx.1)
+        [Instruction](0x1a5f180) : add	: var(sub4.1), /*=*/ var(j.030), int(-2)
+        [Instruction](0x1a5f218) : getelementptr	: var(arrayidx5.1), /*=*/ var(N), int(0), var(sub4.1)
+        [Instruction](0x1a5f288) : load	: ptr(0x1a5f288), var(arrayidx5.1)
+        [Instruction](0x1a5f300) : icmp_slt	: var(cmp6.1), /*=*/ ptr(0x1a5f108), ptr(0x1a5f288)
+        [Instruction](0x1a5f398) : br	: var(cmp6.1), var(for.cond1.backedge.1), var(if.then.1)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](if.then){
+        [Instruction](0x1a5f410) : store	: ptr(0x1a5de78), var(arrayidx)
+        [Instruction](0x1a5f490) : store	: ptr(0x1a5dcf8), var(arrayidx5)
+        [Instruction](0x1a5f4f8) : br	: var(for.cond1.backedge)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.inc13.loopexit.unr-lcssa){
+        [Instruction](0x1a5f558) : br	: var(for.inc13.loopexit)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.inc13.loopexit){
+        [Instruction](0x1a5f5b8) : br	: var(for.inc13)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.inc13){
+        [Instruction](0x1a5f630) : add	: var(inc), /*=*/ var(i.032), int(1)
+        [Instruction](0x1a5f6b0) : icmp_slt	: var(cmp), /*=*/ var(inc), ptr(0x1a57c38)
+        [Instruction](0x1a5f748) : br	: var(cmp), var(for.end14.loopexit), var(for.cond1.preheader)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.end14.loopexit){
+        [Instruction](0x1a5f7a8) : br	: var(for.end14)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.end14){
+        [Instruction](0x1a5f808) : ret	: int(0)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](if.then.1){
+        [Instruction](0x1a5f880) : store	: ptr(0x1a5f288), var(arrayidx.1)
+        [Instruction](0x1a5f900) : store	: ptr(0x1a5f108), var(arrayidx5.1)
+        [Instruction](0x1a5f968) : br	: var(for.cond1.backedge.1)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond1.backedge.1){
+        [Instruction](0x1a5f9e0) : add	: var(j.0.1), /*=*/ var(j.030), int(-2)
+        [Instruction](0x1a56130) : icmp_sgt	: var(cmp2.1), /*=*/ var(j.0.1), var(i.032)
+        [Instruction](0x1a561c8) : br	: var(cmp2.1), var(for.inc13.loopexit.unr-lcssa), var(for.body3)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================

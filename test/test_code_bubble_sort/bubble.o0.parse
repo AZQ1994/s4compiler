@@ -1,0 +1,95 @@
+# Successfully read Module:
+# Name: test/test_code_bubble_sort/bubble.o0.bc
+# Target triple: nvptx
+[Function:main](){
+    [BasicBlock](entry){
+        [Instruction](0x1c95d38) : alloca	: var(retval), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x1c95f38) : alloca	: var(i), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x1c967a8) : alloca	: var(j), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x1c96818) : alloca	: var(temp), /*=*//* size = 4,15*/ int(1)
+        [Instruction](0x1c968a0) : store	: int(0), var(retval)
+        [Instruction](0x1c96920) : store	: int(0), var(i)
+        [Instruction](0x1c96988) : br	: var(for.cond)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond){
+        [Instruction](0x1c969e8) : load	: ptr(0x1c969e8), var(i)
+        [Instruction](0x1c96a48) : load	: ptr(0x1c96a48), var(len)
+        [Instruction](0x1c96ac0) : icmp_slt	: var(cmp), /*=*/ ptr(0x1c969e8), ptr(0x1c96a48)
+        [Instruction](0x1c96b58) : br	: var(cmp), var(for.end14), var(for.body)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body){
+        [Instruction](0x1c96bb8) : load	: ptr(0x1c96bb8), var(len)
+        [Instruction](0x1c96c30) : sub	: var(sub), /*=*/ ptr(0x1c96bb8), int(1)
+        [Instruction](0x1c95dc0) : store	: var(sub), var(j)
+        [Instruction](0x1c95e28) : br	: var(for.cond1)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.cond1){
+        [Instruction](0x1c95e88) : load	: ptr(0x1c95e88), var(j)
+        [Instruction](0x1c98a38) : load	: ptr(0x1c98a38), var(i)
+        [Instruction](0x1c98ab0) : icmp_sgt	: var(cmp2), /*=*/ ptr(0x1c95e88), ptr(0x1c98a38)
+        [Instruction](0x1c98b48) : br	: var(cmp2), var(for.end), var(for.body3)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.body3){
+        [Instruction](0x1c98ba8) : load	: ptr(0x1c98ba8), var(j)
+        [Instruction](0x1c98c38) : getelementptr	: var(arrayidx), /*=*/ var(N), int(0), ptr(0x1c98ba8)
+        [Instruction](0x1c98ca8) : load	: ptr(0x1c98ca8), var(arrayidx)
+        [Instruction](0x1c98d08) : load	: ptr(0x1c98d08), var(j)
+        [Instruction](0x1c98d80) : sub	: var(sub4), /*=*/ ptr(0x1c98d08), int(1)
+        [Instruction](0x1c98e18) : getelementptr	: var(arrayidx5), /*=*/ var(N), int(0), var(sub4)
+        [Instruction](0x1c98e88) : load	: ptr(0x1c98e88), var(arrayidx5)
+        [Instruction](0x1c98f00) : icmp_slt	: var(cmp6), /*=*/ ptr(0x1c98ca8), ptr(0x1c98e88)
+        [Instruction](0x1c98f98) : br	: var(cmp6), var(if.end), var(if.then)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](if.then){
+        [Instruction](0x1c98ff8) : load	: ptr(0x1c98ff8), var(j)
+        [Instruction](0x1c99088) : getelementptr	: var(arrayidx7), /*=*/ var(N), int(0), ptr(0x1c98ff8)
+        [Instruction](0x1c990f8) : load	: ptr(0x1c990f8), var(arrayidx7)
+        [Instruction](0x1c99170) : store	: ptr(0x1c990f8), var(temp)
+        [Instruction](0x1c991d8) : load	: ptr(0x1c991d8), var(j)
+        [Instruction](0x1c99250) : sub	: var(sub8), /*=*/ ptr(0x1c991d8), int(1)
+        [Instruction](0x1c98758) : getelementptr	: var(arrayidx9), /*=*/ var(N), int(0), var(sub8)
+        [Instruction](0x1c987c8) : load	: ptr(0x1c987c8), var(arrayidx9)
+        [Instruction](0x1c98828) : load	: ptr(0x1c98828), var(j)
+        [Instruction](0x1c988b8) : getelementptr	: var(arrayidx10), /*=*/ var(N), int(0), ptr(0x1c98828)
+        [Instruction](0x1c98940) : store	: ptr(0x1c987c8), var(arrayidx10)
+        [Instruction](0x1c989a8) : load	: ptr(0x1c989a8), var(temp)
+        [Instruction](0x1c998c8) : load	: ptr(0x1c998c8), var(j)
+        [Instruction](0x1c99940) : sub	: var(sub11), /*=*/ ptr(0x1c998c8), int(1)
+        [Instruction](0x1c999d8) : getelementptr	: var(arrayidx12), /*=*/ var(N), int(0), var(sub11)
+        [Instruction](0x1c99a60) : store	: ptr(0x1c989a8), var(arrayidx12)
+        [Instruction](0x1c99ac8) : br	: var(if.end)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](if.end){
+        [Instruction](0x1c99b28) : br	: var(for.inc)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.inc){
+        [Instruction](0x1c99b88) : load	: ptr(0x1c99b88), var(j)
+        [Instruction](0x1c99c00) : add	: var(dec), /*=*/ ptr(0x1c99b88), int(-1)
+        [Instruction](0x1c99c80) : store	: var(dec), var(j)
+        [Instruction](0x1c99ce8) : br	: var(for.cond1)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.end){
+        [Instruction](0x1c99d48) : br	: var(for.inc13)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.inc13){
+        [Instruction](0x1c99da8) : load	: ptr(0x1c99da8), var(i)
+        [Instruction](0x1c99e20) : add	: var(inc), /*=*/ ptr(0x1c99da8), int(1)
+        [Instruction](0x1c99ea0) : store	: var(inc), var(i)
+        [Instruction](0x1c99f08) : br	: var(for.cond)
+    }[BasicBlock]
+#------------------------------------------------------
+    [BasicBlock](for.end14){
+        [Instruction](0x1c99f68) : ret	: int(0)
+    }[BasicBlock]
+#------------------------------------------------------
+}[Function]
+#======================================================

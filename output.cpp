@@ -2939,16 +2939,17 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
     }
     Out << ']';
   } else if (const PHINode *PN = dyn_cast<PHINode>(&I)) {
-    Out << ' ';
+    Out << " type=\"";
     TypePrinter.print(I.getType(), Out);
-    Out << ' ';
+    Out << "\" values=\"";
 
     for (unsigned op = 0, Eop = PN->getNumIncomingValues(); op < Eop; ++op) {
-      if (op) Out << ", ";
-      Out << "[ ";
-      writeOperand(PN->getIncomingValue(op), false); Out << ", ";
-      writeOperand(PN->getIncomingBlock(op), false); Out << " ]";
+      if (op) Out << ",";
+      Out << "[";
+      writeOperand(PN->getIncomingValue(op), false); Out << ",";
+      writeOperand(PN->getIncomingBlock(op), false); Out << "]";
     }
+    Out << "\"";
   } else if (const ExtractValueInst *EVI = dyn_cast<ExtractValueInst>(&I)) {
     Out << ' ';
     writeOperand(I.getOperand(0), true);
