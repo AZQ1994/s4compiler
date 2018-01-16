@@ -106,6 +106,7 @@ class Word(object):
 		return self.type
 	#def getName(self):
 	#	return self.name
+
 	def getPtr(self):
 		if(self.label==None):
 			raise Error
@@ -140,15 +141,20 @@ class Words(object):
 		self.name = name
 		for i, v in enumerate(values):
 			self.words.append( self.manager.addDataWord(v, name+"-"+str(i), type_="data-words") )
-
+#### TODO : getAddr()
 
 	def getStr(self):
 		return "\n".join([str(w) for w in self.words])
-
-	def getPtr(self):
-		if len(self.words != 0):
-			return self.words[0].getPtr
-		return 
+	def get(self, index=0):
+		if index < len(self.words):
+			return self.words[index]
+		else:
+			print "##### ERROR INDEX !!!!!!!!"
+	def getPtr(self, index = 0):
+		if index < len(self.words):
+			return self.words[index].getPtr()
+		else:
+			print "##### ERROR INDEX !!!!!!!!"
 
 	def __str__(self):
 		if len(self.words) != 0:
@@ -238,6 +244,24 @@ class WordManager(object):
 			word = self.addDataWord(0, name)
 			self.addName(word, name)
 			return word
+	def turnWordIntoWord(self, W0, W1):
+		if W0.type == "data":
+			self.wordDataDict.pop(W0.label)
+		elif W0.type == "ptr":
+			self.wordPtrDict.pop(id(W0))
+		elif W0.type == "data-ptr":
+			self.wordDataPtrDict.pop(W0.label)
+
+		W0.type = W1.type
+		W0.value = W1.value
+		W0.label = W1.label
+
+		if W1.type == "data":
+			self.wordDataDict[W0.label] = W0
+		elif W1.type == "ptr":
+			self.wordPtrDict[id(W0)] = W0
+		elif W1.type == "data-ptr":
+			self.wordDataPtrDict[W0.label] = W0
 
 	def addPtrWord(self, value, label=None):
 		word = Word("ptr", value, self, label)

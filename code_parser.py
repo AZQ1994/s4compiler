@@ -100,7 +100,9 @@ class CodeParser2(object):
 					if V.get("type").find("x") != -1:
 						arr = V.get("init")[1:-1]
 						values = [s.split(" ")[1] for s in arr.split(", ")]
-						WM.addWords(values, V.get("name").replace(".","_"))
+						WM.addName(WM.addWords(values, V.get("name").replace(".","_")), V.get("name").replace(".","_"))
+					if V.get("type") == "i32":
+						WM.addName(WM.addDataWord(V.get("init"),V.get("name").replace(".","_")), V.get("name").replace(".","_"))
 				continue
 
 			if item1.tag == "Function":
