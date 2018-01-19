@@ -93,10 +93,10 @@ class CodeParser2(object):
 
 		for item1 in module:
 			# functions and global variables
-			print "- ",item1.tag,": ",item1.attrib
+			#print "- ",item1.tag,": ",item1.attrib
 			if item1.tag == "Globals":
 				for V in item1:
-					print V
+					#print V
 					if V.get("type").find("x") != -1:
 						arr = V.get("init")[1:-1]
 						values = [s.split(" ")[1] for s in arr.split(", ")]
@@ -109,7 +109,7 @@ class CodeParser2(object):
 				
 				label_next.append(WM.getNamespace()+item1.get('name').replace(".","_"))
 				WM.pushNamespace(item1.get('name').replace(".","_"))
-
+				append_node = append_node.append(ListNode("func_begin", sys = True, opt=WM.getNamespace(False)))
 				append_node = append_node.append(ListNode("namespace", sys = True, opt=WM.getNamespace(False)))
 
 				args = []
@@ -140,7 +140,7 @@ class CodeParser2(object):
 							append_node = append_node.append(LM.new(ListNode(ins)))
 						
 						if append_node.ins.instrStr in build_methods:
-							params = build_methods[append_node.ins.instrStr](append_node.ins.params, WM)
+							params = build_methods[append_node.ins.instrStr](append_node.ins.params, WM, I)
 						else:
 							params = []
 							for x in append_node.ins.params:
@@ -156,6 +156,7 @@ class CodeParser2(object):
 						#print params
 					WM.popNamespace()
 				WM.popNamespace()
+				append_node = append_node.append(ListNode("func_end", sys = True, opt=WM.getNamespace(False)))
 
 		return startNode, endNode, LM, WM
 
@@ -170,7 +171,7 @@ def check_int(s):
 
 
 ###### test
-
+"""
 startNode, endNode, LM, WM = CodeParser2().parse("test/test_code_bubble_sort/bubble.xml")
 
 current = startNode
@@ -180,6 +181,7 @@ while current != None:
 
 WM.dataMem()
 WM.stackMem()
+"""
 """
 tree = ET.parse('test/test_code_01/plus.xml')
 module = tree.getroot()

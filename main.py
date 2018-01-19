@@ -116,7 +116,7 @@ class analyze:
 					self.WM.needSave = {}
 					#print current.opt
 					for x in current.opt:
-						self.WM.needSave[x] = True
+						self.WM.addNeedSave(x)
 					self.WM.currentFunction = {
 						#"backAddress": self.WM.getName("d_"+"_".join(self.WM.getNamespace(False)[1:]+["backAddress"])),
 						"returnData" : self.WM.getName("d_"+"_".join(self.WM.getNamespace(False)[1:]+["returnData"]))
@@ -192,11 +192,14 @@ class analyze:
 #print "***************"
 #print p.functions
 #print "***************"
-a = analyze("test/test_code_bubble_sort/bubble.o0.xml")
-a.printNodes()
-print "***************"
+#a = analyze("test/test_code_quick/mips-quick-test.o0.xml")
+#a = analyze("test/debug/test.xml")
+a = analyze("test/test_code_quick/mips-quick-test.a.xml")
+#a = analyze("test/test_code_01/plus.o0.xml")
+#a.printNodes()
+#print "***************"
 a.convert()
-print "***************"
+#print "***************"
 #a.opt_label()
 #a.opt_variable_name()
 a.printNodes()

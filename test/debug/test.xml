@@ -1,0 +1,28 @@
+<Module>
+  <!-- ; ModuleID = 'test/test_code_01/plus.o0.bc' -->
+  <!-- source_filename = " test/test_code_01/plus.c  "-->
+  <!-- target datalayout = "e-p:32:32-i64:64-v16:16-v32:32-n16:32:64" -->
+  <!-- target triple = "nvptx" -->
+  <Globals>
+  </Globals>
+
+  <!-- Function Attrs: noinline nounwind -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="test">
+        <Instruction des="cmp1" opName="icmp_sle" type="i32" operands="-19,-1" />
+        <Instruction des="cmp2" opName="icmp_sle" type="i32" operands="-5,0" />
+        <Instruction des="cmp3" opName="icmp_sle" type="i32" operands="-1,-19" />
+        <Instruction des="cmp4" opName="icmp_sle" type="i32" operands="-1,0" />
+        <Instruction des="cmp5" opName="icmp_sle" type="i32" operands="0,-1" />
+        <Instruction des="cmp6" opName="icmp_sle" type="i32" operands="0,-2" />
+        <Instruction des="cmp7" opName="icmp_sle" type="i32" operands="-1,-2" />
+        <Instruction opName="ret" operands="0" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+
+</Module>

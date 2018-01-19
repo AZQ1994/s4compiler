@@ -1,0 +1,31 @@
+<Module>
+  <!-- ; ModuleID = 'void.bc' -->
+  <!-- source_filename = " void.c  "-->
+  <!-- target datalayout = "e-p:32:32-i64:64-v16:16-v32:32-n16:32:64" -->
+  <!-- target triple = "nvptx" -->
+  <Globals>
+  </Globals>
+
+  <!-- Function Attrs: norecurse nounwind readnone -->
+  <Function linkage="" mode="define" returnType="void" name="test">
+    <Arguments number="1">
+      <Arg type="i32" name="a"/>
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction opName="ret" void />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+  <!-- Function Attrs: norecurse nounwind readnone -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction opName="ret" operands="[i32]0" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

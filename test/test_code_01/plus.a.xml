@@ -1,5 +1,5 @@
 <Module>
-  <!-- ; ModuleID = 'test/test_code_01/plus.bc' -->
+  <!-- ; ModuleID = 'test/test_code_01/plus.a.bc' -->
   <!-- source_filename = " test/test_code_01/plus.c  "-->
   <!-- target datalayout = "e-p:32:32-i64:64-v16:16-v32:32-n16:32:64" -->
   <!-- target triple = "nvptx" -->
@@ -13,8 +13,15 @@
     </Arguments>
     <BasicBlocks>
       <BasicBlock name="entry">
+        <Instruction des=".reg2mem" opName="alloca"  allocaType="i32" />
+        <Instruction des="res.0.lcssa.reg2mem" opName="alloca"  allocaType="i32" />
+        <Instruction des=""reg2mem alloca point"" opName="bitcast" [i32]0 to i32 />
         <Instruction des="cmp6" opName="icmp_slt" type="i32" operands="a,0" />
-        <Instruction opName="br" operands="[i1]cmp6, [label]for.cond.cleanup, [label]for.body.preheader" />
+        <Instruction opName="br" operands="[i1]cmp6, [label]entry.for.cond.cleanup_crit_edge, [label]for.body.preheader" />
+      </BasicBlock>
+      <BasicBlock name="entry.for.cond.cleanup_crit_edge">
+        <Instruction opName="store" operands="[i32]0,[i32*]res.0.lcssa.reg2mem" />
+        <Instruction opName="br" type="label" operands="for.cond.cleanup" />
       </BasicBlock>
       <BasicBlock name="for.body.preheader">
         <Instruction des="r-0" opName="zext" [i32]a to i33 />
@@ -24,11 +31,14 @@
         <Instruction des="r-4" opName="lshr" type="i33" operands="r-3,1" />
         <Instruction des="r-5" opName="trunc" [i33]r-4 to i32 />
         <Instruction des="r-6" opName="add" type="i32" operands="r-5,a" />
+        <Instruction opName="store" operands="[i32]r-6,[i32*].reg2mem" />
+        <Instruction des=".reload" opName="load" loadType="i32" type="i32*" operands=".reg2mem" />
+        <Instruction opName="store" operands="[i32].reload,[i32*]res.0.lcssa.reg2mem" />
         <Instruction opName="br" type="label" operands="for.cond.cleanup" />
       </BasicBlock>
       <BasicBlock name="for.cond.cleanup">
-        <Instruction des="res.0.lcssa" opName="phi" type="i32" values="[0,entry],[r-6,for.body.preheader]" />
-        <Instruction opName="ret" operands="[i32]res.0.lcssa" />
+        <Instruction des="res.0.lcssa.reload" opName="load" loadType="i32" type="i32*" operands="res.0.lcssa.reg2mem" />
+        <Instruction opName="ret" operands="[i32]res.0.lcssa.reload" />
       </BasicBlock>
     </BasicBlocks>
   </Function>
@@ -39,6 +49,7 @@
     </Arguments>
     <BasicBlocks>
       <BasicBlock name="entry">
+        <Instruction des=""reg2mem alloca point"" opName="bitcast" [i32]0 to i32 />
         <Instruction opName="ret" operands="[i32]0" />
       </BasicBlock>
     </BasicBlocks>

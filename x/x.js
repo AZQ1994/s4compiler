@@ -673,8 +673,9 @@ function write_words(){
     var count=0;
     $('.prog').each(function(){
         var d = $(this).text().replace(/%/g,'\\%');
+
         if(d=='NEXT'){
-            mem[count++] = $(this).attr('id').substring(1)+1;
+            mem[count++] = parseInt($(this).attr('id').substring(1))+1;
         }else if(d=='HALT'){
             mem[count++] = -1;//$(this).html().replace('#','');
         //}else if($(this).html()[0]=='#'){

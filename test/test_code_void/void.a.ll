@@ -1,32 +1,19 @@
-; ModuleID = 'test/test_code_01/plus.c'
-source_filename = "test/test_code_01/plus.c"
+; ModuleID = 'void.bc'
+source_filename = "void.c"
 target datalayout = "e-p:32:32-i64:64-v16:16-v32:32-n16:32:64"
 target triple = "nvptx"
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @plus(i32 %a) local_unnamed_addr #0 {
+define void @test(i32 %a) local_unnamed_addr #0 {
 entry:
-  %cmp6 = icmp slt i32 %a, 0
-  br i1 %cmp6, label %for.cond.cleanup, label %for.body.preheader
-
-for.body.preheader:                               ; preds = %entry
-  %0 = zext i32 %a to i33
-  %1 = add i32 %a, -1
-  %2 = zext i32 %1 to i33
-  %3 = mul i33 %0, %2
-  %4 = lshr i33 %3, 1
-  %5 = trunc i33 %4 to i32
-  %6 = add i32 %5, %a
-  br label %for.cond.cleanup
-
-for.cond.cleanup:                                 ; preds = %for.body.preheader, %entry
-  %res.0.lcssa = phi i32 [ 0, %entry ], [ %6, %for.body.preheader ]
-  ret i32 %res.0.lcssa
+  %"reg2mem alloca point" = bitcast i32 0 to i32
+  ret void
 }
 
 ; Function Attrs: norecurse nounwind readnone
 define i32 @main() local_unnamed_addr #0 {
 entry:
+  %"reg2mem alloca point" = bitcast i32 0 to i32
   ret i32 0
 }
 

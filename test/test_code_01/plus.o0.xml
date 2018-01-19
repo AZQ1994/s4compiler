@@ -1,1 +1,63 @@
- Error opening input file: No such file or directory
+<Module>
+  <!-- ; ModuleID = 'test/test_code_01/plus.o0.bc' -->
+  <!-- source_filename = " test/test_code_01/plus.c  "-->
+  <!-- target datalayout = "e-p:32:32-i64:64-v16:16-v32:32-n16:32:64" -->
+  <!-- target triple = "nvptx" -->
+  <Globals>
+  </Globals>
+
+  <!-- Function Attrs: noinline nounwind -->
+  <Function linkage="" mode="define" returnType="i32" name="plus">
+    <Arguments number="1">
+      <Arg type="i32" name="a"/>
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="a.addr" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="res" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="i" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction opName="store" operands="[i32]a,[i32*]a.addr" />
+        <Instruction opName="store" operands="[i32]0,[i32*]res" />
+        <Instruction opName="store" operands="[i32]0,[i32*]i" />
+        <Instruction opName="br" type="label" operands="for.cond" />
+      </BasicBlock>
+      <BasicBlock name="for.cond">
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="a.addr" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="i" />
+        <Instruction des="cmp" opName="icmp_sge" type="i32" operands="r-0,r-1" />
+        <Instruction opName="br" operands="[i1]cmp, [label]for.body, [label]for.end" />
+      </BasicBlock>
+      <BasicBlock name="for.body">
+        <Instruction des="r-2" opName="load" loadType="i32" type="i32*" operands="i" />
+        <Instruction des="r-3" opName="load" loadType="i32" type="i32*" operands="res" />
+        <Instruction des="add" opName="add" type="i32" operands="r-3,r-2" />
+        <Instruction opName="store" operands="[i32]add,[i32*]res" />
+        <Instruction opName="br" type="label" operands="for.inc" />
+      </BasicBlock>
+      <BasicBlock name="for.inc">
+        <Instruction des="r-4" opName="load" loadType="i32" type="i32*" operands="i" />
+        <Instruction des="inc" opName="add" type="i32" operands="r-4,1" />
+        <Instruction opName="store" operands="[i32]inc,[i32*]i" />
+        <Instruction opName="br" type="label" operands="for.cond" />
+      </BasicBlock>
+      <BasicBlock name="for.end">
+        <Instruction des="r-5" opName="load" loadType="i32" type="i32*" operands="res" />
+        <Instruction opName="ret" operands="[i32]r-5" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+  <!-- Function Attrs: noinline nounwind -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="retval" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction opName="store" operands="[i32]0,[i32*]retval" />
+        <Instruction des="call" opName="call" functionType="i32" operands="plus, [i32]100" />
+        <Instruction opName="ret" operands="[i32]0" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>
