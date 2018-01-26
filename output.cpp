@@ -3047,10 +3047,9 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
     TypePrinter.print(FTy->isVarArg() ? FTy : RetTy, Out);
     Out << "\" operands=\"";
     writeOperand(Operand, false);
-    Out << ", ";
+
     for (unsigned op = 0, Eop = CI->getNumArgOperands(); op < Eop; ++op) {
-      if (op > 0)
-        Out << ", ";
+      Out << ", ";
       writeParamOperand(CI->getArgOperand(op), PAL, op + 1);
     }
 
