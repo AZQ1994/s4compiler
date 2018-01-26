@@ -13,7 +13,7 @@
     </Arguments>
     <BasicBlocks>
       <BasicBlock name="entry">
-        <Instruction opName="ret" void />
+        <Instruction opName="ret" returnType="void" />
       </BasicBlock>
     </BasicBlocks>
   </Function>

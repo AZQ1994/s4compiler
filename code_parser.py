@@ -125,7 +125,7 @@ class CodeParser2(object):
 
 					WM.pushNamespace(BB.get("name").replace(".","_"))
 					append_node = append_node.append(ListNode("namespace", sys = True, opt=WM.getNamespace(False)))
-					
+					append_node = append_node.append(ListNode("bb_begin", sys = True, opt=WM.getNamespace(False)))
 					for I in BB: # instruction
 						############### des + params TODO
 						ins_name = I.get("opName")
@@ -154,6 +154,7 @@ class CodeParser2(object):
 						#append_node.ins.updateAll(params)
 						append_node.ins.params=params
 						#print params
+					append_node = append_node.append(ListNode("bb_end", sys = True, opt=WM.getNamespace(False)))
 					WM.popNamespace()
 				WM.popNamespace()
 				append_node = append_node.append(ListNode("func_end", sys = True, opt=WM.getNamespace(False)))

@@ -124,13 +124,78 @@ def trans_getelementptr(LN, WM, LM):
 	else:
 		temp = WM.getTemp(0)
 		NEXT = WM.getNext()
-		c0 = WM.const(0)
-		
+		c_0 = WM.const(0)
+
 		p1addr = WM.addDataWord(WM.label(param1.name), "addr")
 		#### TODO # a method to create only one address memory
+		nextLN = LN.getNextInst()
+		if nextLN.ins.instrStr == "load":#"store"
+			# check ptr dependency
+			if nextLN.ins.params[1] == param0:
+				w = Word("data-ptr", 0, WM, WM.newDataLabel("load_p"))
+				WM.turnWordIntoWord(param0, w)
+				
+				nextParam0 = nextLN.ins.params[0]
+				LN1 = LM.new(ListNode(Subneg4Instruction(
+						param3.getPtr(),
+						c_0.getPtr(),
+						temp.getPtr(),
+						NEXT,
+						"\t// getelementptr"
+					)))
+				LN2 = LM.new(ListNode(Subneg4Instruction(
+						temp.getPtr(),
+						p1addr.getPtr(),
+						param0.getPtr(),
+						NEXT,
+						"\t// test"
+					)))
+				LN3 = LM.new(ListNode(Subneg4Instruction(
+						c_0.getPtr(),
+						param0,
+						nextParam0.getPtr(),
+						NEXT,
+						"\t// load element ptr"
+					)))
+				LN.replace(LM, LN1, LN2, LN3)
+				WM.addNeedSave(param0)
+				nextLN.remove()
+				return LN3.getNextInst()
+		elif nextLN.ins.instrStr == "store":
+			# check ptr dependency
+			if nextLN.ins.params[1] == param0:
+				w = Word("data-ptr", 0, WM, WM.newDataLabel("store_p"))
+				WM.turnWordIntoWord(param0, w)
+
+				nextParam0 = nextLN.ins.params[0]
+				LN1 = LM.new(ListNode(Subneg4Instruction(
+						param3.getPtr(),
+						c_0.getPtr(),
+						temp.getPtr(),
+						NEXT,
+						"\t// getelementptr"
+					)))
+				LN2 = LM.new(ListNode(Subneg4Instruction(
+						temp.getPtr(),
+						p1addr.getPtr(),
+						param0.getPtr(),
+						NEXT,
+						"\t// test"
+					)))
+				LN3 = LM.new(ListNode(Subneg4Instruction(
+						c_0.getPtr(),
+						nextParam0.getPtr(),
+						param0,
+						NEXT,
+						"\t// store element ptr"
+					)))
+				LN.replace(LM, LN1, LN2, LN3)
+				WM.addNeedSave(param0)
+				nextLN.remove()
+				return LN3.getNextInst()
 		LN1 = LM.new(ListNode(Subneg4Instruction(
 				param3.getPtr(),
-				c0.getPtr(),
+				c_0.getPtr(),
 				temp.getPtr(),
 				NEXT,
 				"\t// getelementptr"
@@ -252,7 +317,7 @@ def trans_load(LN, WM, LM):
 			param1.getPtr(),
 			param0.getPtr(),
 			NEXT,
-			"\t// load"
+			"\t// load normal"
 		)))
 	LN.replace(LM, LN1)
 
@@ -271,14 +336,14 @@ def trans_store(LN, WM, LM):
 			param1.getPtr(),
 			WRITE.getPtr(),
 			NEXT,
-			"\t// load ptr"
+			"\t// store ptr"
 		)))
 		LN2 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
 			param0.getPtr(),
 			WRITE,
 			NEXT,
-			"\t// load"
+			"\t// store"
 		)))
 		LN.replace(LM, LN1, LN2)
 		return
@@ -288,7 +353,7 @@ def trans_store(LN, WM, LM):
 			param0.getPtr(),
 			param1.getPtr(),
 			NEXT,
-			"\t// store"
+			"\t// store normal"
 		)))
 	LN.replace(LM, LN1)
 
@@ -344,7 +409,7 @@ def trans_call(LN, WM, LM):
 	)))
 
 	stack_node = []
-
+	#### TODO !!!! graph for analyzing the comming up bbs
 	ns =  WM.needSave.copy()
 	current = LN
 	while current != None:
@@ -457,6 +522,69 @@ need to loop the conversion or create another way
 	return
 
 def trans_icmp_sle(LN, WM, LM):
+	nextLN = LN.getNextInst() 
+	if nextLN.ins.instrStr == "br":
+		
+		if len(nextLN.ins.params) == 3:
+			
+			# TODO : check using of param0
+			param0 = LN.ins.params[0]
+			br_param0 = nextLN.ins.params[0]
+			if param0 == br_param0:
+
+				param1 = LN.ins.params[1]
+				param2 = LN.ins.params[2]
+				goto1 = nextLN.ins.params[1] # 1
+				goto2 = nextLN.ins.params[2] # -1
+			
+				c_0 = WM.const(0)
+				c_1 = WM.const(1)
+				c_m1 = WM.const(-1)
+				
+				temp = WM.getTemp(0)
+				NEXT = WM.getNext()
+
+				LN5 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto1
+				)))
+				LN2 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto2
+				)))
+				LN4 = LM.new(ListNode(Subneg4Instruction(
+					param1.getPtr(),
+					param2.getPtr(),
+					temp.getPtr(),
+					WM.label(LN2.getALabel())
+				)))
+				LN3 = LM.new(ListNode(Subneg4Instruction(
+					param2.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN5.getALabel())
+				)))
+				LN1 = LM.new(ListNode(Subneg4Instruction(
+					param2.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN4.getALabel())
+				)))
+				LN0 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					param1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN3.getALabel()),
+					"\t// sle"
+				)))
+				LN.replace(LM, LN0, LN1, LN2, LN3, LN4, LN5)
+				nextLN.remove()
+
+				return LN5.getNextInst()
 	"""
 	if param1 <= param2 set 1 else set -1
 
@@ -473,10 +601,10 @@ def trans_icmp_sle(LN, WM, LM):
 
 	L0: 0 param1 temp L3
 	L1: param2 -1 temp L4
-	L2: 0 -1 res Lfin
+	L2: 0 -1 res Lfin -> set -1
 	L3: param2 -1 temp L5
 	L4: param1 param2 temp L2
-	L5: 0 1 res NEXT
+	L5: 0 1 res NEXT -> set 1
 	"""
 	param1 = LN.ins.params[1]
 	param2 = LN.ins.params[2]
@@ -531,6 +659,68 @@ def trans_icmp_sge(LN, WM, LM):
 	"""
 	reverse version of sle
 	"""
+	nextLN = LN.getNextInst() 
+	if nextLN.ins.instrStr == "br":
+		
+		if len(nextLN.ins.params) == 3:
+			
+			# TODO : check using of param0
+			param0 = LN.ins.params[0]
+			br_param0 = nextLN.ins.params[0]
+			if param0 == br_param0:
+				param2 = LN.ins.params[1]
+				param1 = LN.ins.params[2]
+				goto1 = nextLN.ins.params[1] # 1
+				goto2 = nextLN.ins.params[2] # -1
+			
+				c_0 = WM.const(0)
+				c_1 = WM.const(1)
+				c_m1 = WM.const(-1)
+				
+				temp = WM.getTemp(0)
+				NEXT = WM.getNext()
+
+				LN5 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto1
+				)))
+				LN2 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto2
+				)))
+				LN4 = LM.new(ListNode(Subneg4Instruction(
+					param1.getPtr(),
+					param2.getPtr(),
+					temp.getPtr(),
+					WM.label(LN2.getALabel())
+				)))
+				LN3 = LM.new(ListNode(Subneg4Instruction(
+					param2.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN5.getALabel())
+				)))
+				LN1 = LM.new(ListNode(Subneg4Instruction(
+					param2.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN4.getALabel())
+				)))
+				LN0 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					param1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN3.getALabel()),
+					"\t// sle"
+				)))
+				LN.replace(LM, LN0, LN1, LN2, LN3, LN4, LN5)
+				nextLN.remove()
+
+				return LN5.getNextInst()
 	param2 = LN.ins.params[1]
 	param1 = LN.ins.params[2]
 	param0 = LN.ins.params[0]
@@ -626,14 +816,82 @@ def trans_icmp_slt(LN, WM, LM):
 	I1:	0, param1, temp, I7
 	I2:	0, param2, temp, I4
 	I3:	param2, param1, temp, I5
-	I4: 0, -1, param0, HALT
-	I5: 0, 1, param0, NEXT
+	I4: 0, -1, param0, HALT -> set -1
+	I5: 0, 1, param0, NEXT -> set 1
 	I6:	0, -1, temp, HALT
 	I7:	0, param2, temp, I3
-	I8:	0, 1, param0, NEXT
+	I8:	0, 1, param0, NEXT -> set 1
 
 	"""
+	nextLN = LN.getNextInst() 
+	if nextLN.ins.instrStr == "br":
+		
+		if len(nextLN.ins.params) == 3:
+			
+			# TODO : check using of param0
+			param0 = LN.ins.params[0]
+			br_param0 = nextLN.ins.params[0]
+			if param0 == br_param0:
+				param1 = LN.ins.params[1]
+				param2 = LN.ins.params[2]
+				goto1 = nextLN.ins.params[1] # 1
+				goto2 = nextLN.ins.params[2] # -1
+			
+				c_0 = WM.const(0)
+				c_1 = WM.const(1)
+				c_m1 = WM.const(-1)
+				
+				temp = WM.getTemp(0)
+				NEXT = WM.getNext()
 
+				LN8 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto1
+				)))
+				LN5 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto1
+				)))
+				LN3 = LM.new(ListNode(Subneg4Instruction(
+					param2.getPtr(),
+					param1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN5.getALabel())
+				)))
+				LN7 = LM.new(ListNode(Subneg4Instruction(#Llt_0
+					c_0.getPtr(),
+					param2.getPtr(),
+					temp.getPtr(),
+					WM.label(LN3.getALabel())
+				)))
+				LN4 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto2
+				)))
+				LN2 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					param2.getPtr(),
+					temp.getPtr(),
+					WM.label(LN4.getALabel())
+				)))
+				LN1 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					param1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN7.getALabel()),
+					"\t// slt"
+				)))
+
+				LN.replace(LM, LN1, LN2, LN3, LN4, LN5, LN7, LN8)
+				nextLN.remove()
+
+				return LN8.getNextInst()
 
 	
 	param1 = LN.ins.params[1]
@@ -710,6 +968,75 @@ def trans_icmp_slt(LN, WM, LM):
 def trans_icmp_sgt(LN, WM, LM):
 	# reverse version of slt
 	# param1 <-> param2
+	nextLN = LN.getNextInst() 
+	if nextLN.ins.instrStr == "br":
+		
+		if len(nextLN.ins.params) == 3:
+			
+			# TODO : check using of param0
+			param0 = LN.ins.params[0]
+			br_param0 = nextLN.ins.params[0]
+			if param0 == br_param0:
+				param2 = LN.ins.params[1]
+				param1 = LN.ins.params[2]
+				goto1 = nextLN.ins.params[1] # 1
+				goto2 = nextLN.ins.params[2] # -1
+			
+				c_0 = WM.const(0)
+				c_1 = WM.const(1)
+				c_m1 = WM.const(-1)
+				
+				temp = WM.getTemp(0)
+				NEXT = WM.getNext()
+
+				LN8 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto1
+				)))
+				LN5 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto1
+				)))
+				LN3 = LM.new(ListNode(Subneg4Instruction(
+					param2.getPtr(),
+					param1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN5.getALabel())
+				)))
+				LN7 = LM.new(ListNode(Subneg4Instruction(#Llt_0
+					c_0.getPtr(),
+					param2.getPtr(),
+					temp.getPtr(),
+					WM.label(LN3.getALabel())
+				)))
+				LN4 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					c_m1.getPtr(),
+					temp.getPtr(),
+					goto2
+				)))
+				LN2 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					param2.getPtr(),
+					temp.getPtr(),
+					WM.label(LN4.getALabel())
+				)))
+				LN1 = LM.new(ListNode(Subneg4Instruction(
+					c_0.getPtr(),
+					param1.getPtr(),
+					temp.getPtr(),
+					WM.label(LN7.getALabel()),
+					"\t// slt"
+				)))
+
+				LN.replace(LM, LN1, LN2, LN3, LN4, LN5, LN7, LN8)
+				nextLN.remove()
+
+				return LN8.getNextInst()
 	param2 = LN.ins.params[1]
 	param1 = LN.ins.params[2]
 	param0 = LN.ins.params[0]

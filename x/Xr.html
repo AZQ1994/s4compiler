@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.0.0/jquery.min.js"></script>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.0/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.0/ext-language_tools.js"></script>
+
+<script src="https://cdn.bootcss.com/react/15.6.1/react.min.js"></script>
+<script src="https://cdn.bootcss.com/react/15.6.1/react-dom.min.js"></script>
+<script src="https://cdn.bootcss.com/babel-standalone/7.0.0-alpha.20/babel.min.js"></script>
+
+<style>
+body,button, input, select, textarea,h1 ,h2, h3, h4, h5, h6 { font-family: Arial !important;}
+
+#footer{
+    height: 100px;
+}
+#terminal{
+    height:300px;
+    overflow:scroll;
+    background:#000;
+    color:white;
+    padding:5px;
+    padding-bottom:20px;
+    font-family: Monaco, Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace;
+}
+#output{
+    height:300px;
+    overflow:scroll;
+    background:#444;
+    color:white;
+    padding:5px;
+    padding-bottom:20px;
+    font-family: Monaco, Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace;
+}
+.output{
+    text-align: right;
+    font-size: 12px;
+}
+#text-data{
+    width:100%;
+    height:500px;
+}
+#output-data{
+    width:100%;
+    height:200px;
+}
+.instruction{
+    font-size:18px;
+}
+.instruction:hover{
+    background:#f0f0f0 !important;
+}
+.instruction:nth-child(2n-1){
+    background:#f9f9f9;
+}
+.data-line{
+    font-size:18px;
+}
+.data-line:hover{
+    background:#f0f0f0 !important;
+}
+.data-line:nth-child(2n-1){
+    background:#f9f9f9;
+}
+.prog{
+    padding-left:5px;
+}
+.data-label{
+    line-height:2;
+}
+.former-data{
+    font-size:80%;
+}
+.edit{
+    position:absolute;
+    right:0px;
+    
+}
+.file-name{
+    display: inline-block !important;
+    width:80%;
+    cursor: pointer;
+}
+.file-delete{
+    display: inline-block !important;
+    position: absolute;
+    right: 0;
+    padding: 3px 10px !important;
+    cursor: pointer;
+}
+.last_step{
+    background: #ddaa77 !important;
+}
+.next_step{
+    background: #88bbff !important;
+}
+.step_data{
+    background: #ddaa77 !important;
+}
+.step_break_point{
+    border: solid 2px black;
+}
+</style>
+</head>
+<body>
+    <div id="main-frame"></div>
+<script type="text/babel">
+class Panel extends React.Component{
+    render(){
+        return (
+            <div>
+                <div class="jumbotron">
+                    <div className="container">
+                        <h2>SUBNEG4 program writer</h2>
+                    </div>
+                    <OutputPanel />
+                </div>
+                <ControlPanel />
+                <MemoryPanel />
+            </div>
+        )
+    }
+}
+class OutputPanel extends React.Component{
+    render(){
+        return (
+            <div>
+                <span class="label label-default">Output</span>
+                <div className="row">
+                    <div id="terminal" className="col-sm-9"></div>
+                    <div id="output" className="col-sm-3"></div>
+                </div>
+                <button className="btn btn-xs btn-primary" id="term-empty-line">empty line</button>
+                <button className="btn btn-xs btn-primary" id="term-clear">clear</button>
+                <button className="btn btn-xs btn-primary" id="term-raw-mem">raw mem data</button>
+                <button className="btn btn-xs btn-primary" id="term-prog-mem">prog mem</button>
+                <button className="btn btn-xs btn-primary" id="term-data-mem">data mem</button>
+                <button className="btn btn-xs btn-warning" id="output-clear">clear output terminal</button>
+                <div id="warning"></div>
+            </div>
+        )
+    }
+}
+class ControlPanel extends React.Component{
+	constructor(props){
+		super(props)
+
+	}
+    render(){
+        return (
+            <div>
+
+            </div>
+            
+        )
+    }
+}
+
+class DataMemLine extends React.Component{
+	constructor(props){
+		super(props)
+
+	}
+    render(){
+        return (
+	        <div class="data-line row">
+				<div class="label-data col-xs-3">
+					{this.props.data.label.map( (l) => 
+						<span class="label label-default data-label">l</span>
+					)}
+				</div>
+				<div class="former-data col-xs-3">({this.props.data.former})</div>
+				<div class="data-data col-xs-5">
+					<span class="data label_arg1">{this.props.data.data}</span>
+				</div>
+				<a class="btn btn-default edit edit-data"><span class="glyphicon glyphicon-edit" aria-hidden="true"></span></a>
+			</div>
+        )
+    }
+}
+class MemoryPanel extends React.Component{
+    render(){
+        return (
+        	<div className="container">
+            	<div className="row">
+            		<div id="data-mem" className="col-sm-5">
+            			{
+            				this.props.data_mem.map( (d, index) => {
+            					<DataMemLine data={d} index={index} }/>
+            				})
+            			}
+            		</div>
+            		<div id="prog-mem" className="col-sm-7">
+            			<div></div>
+            		</div>
+            	</div>
+            </div>
+        )
+    }
+}
+</script>
+<script>
+var mem_ref = {}; // label registration {label:[0/1(data or prog), index]}
+//var mem_data = []; // ???? mem_data[i] = {label:[], type:"ptr/data", ptr:"", data:""}
+
+var data_mem = []; // {label: [], type:"ref/data", data:"", former:""}
+var prog_mem = []; // {label: [], type:"ref/data", data:"", former:""} // first
+
+
+
+</script>
+
+<div class="container">
+
+<div class="well" id="control_panel">
+    <div class="row">
+        <div class="col-sm-3">
+            <span class="label label-default">functions</span>
+            <button id="parse_text_button" class="btn btn-block btn-warning">parse TEXT</button>
+            <button id="start_button" class="btn btn-danger btn-lg btn-block"><i class="glyphicon glyphicon-play"></i> Program Start</button>
+            <hr>
+            <!--<button id="create_memory_button" class="btn btn-block btn-default">create memory</button>
+            <button id="parse_memory_button" class="btn btn-block btn-default">parse raw mem data</button>-->
+            <button id="step_button" class="btn btn-block btn-primary">Run program by step</button>
+            <button id="step_start_button" class="btn btn-danger col-xs-8" title="Ctrl-R"><i class="glyphicon glyphicon-fast-forward"></i></button>
+            <button id="step_go_button" class="btn btn-warning col-xs-4" title="Ctrl-G"><i class="glyphicon glyphicon-step-forward"></i></button>
+            <hr>
+            <button id="write_words_button" class="btn btn-block btn-primary">machine code output</button>
+            <button id="check_routine_button" class="btn btn-block btn-default">check routine(labels & data)</button>
+            <div class="well well-sm" id="text-controller">
+                <p>
+                    <span class="label label-warning">current:</span>
+                    <span id="current-editing"></span>
+                </p>
+            </div>
+        </div>
+        <div class="col-sm-6">
+            <span class="label label-default">routine & data TEXT</span><br>
+            <!--<textarea id="text-data"></textarea>-->
+            <div class="btn-group btn-group-sm">
+                <button id="clear-text" class="btn btn-default"><i class="glyphicon glyphicon-file"></i></button>
+                <div class="btn-group btn-group-sm">
+                      <button class="btn btn-default dropdown-toggle" data-toggle="dropdown"><i class="glyphicon glyphicon-text-size"></i> <span class="caret"></span></button>
+                      <ul class="dropdown-menu" id="font-size">
+                            <li><a href="#" data-size="12">12px</a></li>
+                            <li><a href="#" data-size="15">15px</a></li>
+                            <li><a href="#" data-size="18">18px</a></li>
+                            <li><a href="#" data-size="21">21px</a></li>
+                      </ul>
+                </div>
+                <button id="save-text" class="btn btn-default" title="Ctrl-S"><i class="glyphicon glyphicon-floppy-save"></i> Save</button>
+                <button id="save_as-text" class="btn btn-default" title="Ctrl-Shift-S"><i class="glyphicon glyphicon-floppy-save"></i> Save as</button>
+
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-default" id="load-text"><i class="glyphicon glyphicon-folder-open"></i> Load</button>
+                    <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <span class="caret"></span>
+                        <span class="sr-only">Toggle Dropdown</span>
+                    </button>
+                    <ul class="dropdown-menu" id="load-list">
+                        
+                        
+                    </ul>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    Presets <span class="caret"></span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a href="javascript:void(0)" id="load_mult">load mult</a></li>
+                        <li><a href="javascript:void(0)" id="load_div">load div</a></li>
+                        <li><a href="javascript:void(0)" id="load_div_no_mod">load div(no mod)</a></li>
+                        <li><a href="javascript:void(0)" id="load_and">load and</a></li>
+                        <li><a href="javascript:void(0)" id="load_or">load or </a></li>
+                        <li><a href="javascript:void(0)" id="load_srl">load right shift logic</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div id="text-data"></div>
+            
+        </div>
+        <div class="col-sm-3">
+            <span class="label label-default">words</span>
+            <textarea id="output-data"></textarea>
+            <button class="btn btn-sm btn-default" id="execute_memory_data">execute</button>
+        </div>
+    </div>
+    
+</div>
+
+<script>
+var editor = ace.edit("text-data");
+editor.$blockScrolling = Infinity;
+editor.setOptions({
+  enableBasicAutocompletion: true,
+  enableSnippets: true,
+  enableLiveAutocompletion: true
+});
+editor.setTheme("ace/theme/github");
+//editor.setTheme("ace/theme/twilight");
+//editor.getSession().setMode("ace/mode/javascript");
+document.getElementById('text-data').style.fontSize='15px';
+editor.getSession().setTabSize(8);
+
+
+
+</script> 
+
+<div class="container">
+    <div class="row" id="memory"></div>
+</div>
+<!--<div class="container">
+    <pre>
+README:
+    Program is seperated to two parts of memory, prog-mem and data-mem, but you can input them at the same time.
+    Label is defined by writting ':' before data. A label's name can be a word or a number.
+    
+    In prog-mem, all data is supposed to be a label pointing at the real data.
+    The parser will ignore all spaces and recognize comma(','), 
+    that if there is only 1 data in this line, it is a data, and if there is 4 or 3 data in this line, it is program.
+    
+    When you need to use pointer, you will need to use '@' and '#' mark. 
+    '@' means the real address of the memory (which is started from 0, prog-mem at first, and then data-mem).
+    '#' mark means the address of the label.
+    
+    The end of program is 'HALT', and the next line of program is 'NEXT'.
+    </pre>
+</div>-->
+<!-- Modal -->
+<div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="myModalLabel">Modal title</h4>
+            </div>
+            <div class="modal-body">
+                <form class="form-horizontal">
+                    <div class="form-group">
+                        <label for="input-label" class="col-sm-2 control-label">Label</label>
+                        <div class="col-sm-10">
+                            <input class="form-control" id="input-label">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="input-data" class="col-sm-2 control-label">Data</label>
+                        <div class="col-sm-10">
+                            <input class="form-control" id="input-data">
+                        </div>
+                    </div>
+                    
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="save_button">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Modal2 -->
+<div class="modal fade" id="myModal2" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="myModalLabel4">edit routine</h4>
+            </div>
+            <div class="modal-body">
+                <form class="form-horizontal">
+                    
+                    
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="save_button2">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="save_as-modal" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="myModalLabel4">SAVE AS</h4>
+            </div>
+            <div class="modal-body">
+                <div id="file_list">
+                </div>
+                <input class="form-control" id="save_as-name">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">cancel</button>
+                <button type="button" class="btn btn-primary" id="save_as-button">Save </button>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="footer" class="container">
+    <p class="text-success">@Jingyuan Zhao</p>
+    <p class="text-primary">Email: jingyuan@cad.ce.titech.ac.jp</p>
+    <p class="text-warning">ver 20170126</p>
+</div>
+
+<script>
+$('#start_button').click(execute_start);
+$('#write_words_button').click(write_words);
+//$('#create_memory_button').click(create_memory);
+//$('#parse_memory_button').click(parse_raw);
+$('#step_button').click(step);
+$('#step_start_button').click(execute_till_breakpoint);
+$('#step_go_button').click(execute_step);
+$('#parse_text_button').click(parse_text);
+$('#check_routine_button').click(check_routine);
+$('#term-clear').click(terminal_clear);
+$('#term-empty-line').click(function(){
+    terminal_print('');
+});
+$('#term-raw-mem').click(function(){
+    terminal_print(raw_mem);
+});
+$('#term-prog-mem').click(function(){
+    terminal_print_array_array(prog_mem);
+});
+$('#term-data-mem').click(function(){
+    terminal_print_array(data_mem);
+});
+$('#load_mult').click(function(){
+    editor.setValue($('#mult-routine').val());
+});
+$('#load_div').click(function(){
+    editor.setValue($('#div-routine').val());
+});
+$('#load_div_no_mod').click(function(){
+    editor.setValue($('#div-no-mod-routine').val());
+});
+$('#load_and').click(function(){
+    editor.setValue($('#and-routine').val());
+});
+$('#load_or').click(function(){
+    editor.setValue($('#or-routine').val());
+});
+$('#load_srl').click(function(){
+    editor.setValue($('#srl-routine').val());
+});
+$('#clear-text').click(function(){
+    editor.setValue('');
+    $('#current-editing').html('');
+});
+$('#save-text').click(function(){
+    if($('#current-editing').html()==''){
+        $('#save_as-text').click();
+    }else{
+        save_text_data($('#current-editing').html(),editor.getValue());
+    }
+    
+    
+});
+$('#save_as-text').click(function(){
+    $('#save_as-modal').modal();
+});
+$('#load-text').click(function(){
+    if(editor.getValue()==''||confirm("sure?")){
+        load_text_data($('#current-editing').html());
+    }
+})
+$('#execute_memory_data').click(execute_memory_data);
+
+$('#save_button').click(save_edit);
+$('#save_as-button').click(function(){
+    var name = $('#save_as-name').val();
+    if(name==""){
+        alert('need to input name!');
+        return;
+    }
+    save_text_data(name,editor.getValue());
+    $('#current-editing').html(name);
+    $('#save_as-modal').modal('hide');
+});
+$('#font-size').click(function(e) {
+        editor.setFontSize($(e.target).data('size'));
+    });
+
+$('#output-clear').click(function(){
+    $('#output').html("");
+});
+
+</script>
+<script>
+var text_data;
+$(function(){
+    if(localStorage.getItem('text-data')==''){
+        text_data = new Object();
+    }else{
+        text_data = $.parseJSON(localStorage.getItem('text-data'));
+    }
+    if(text_data == null){
+        text_data = new Object();
+    }
+    for(var key in text_data){
+        if(key.substring(0,6)=='(save)'){
+            add_load_list(key.substring(6));
+        }
+    }
+});
+
+var prog_mem = [],data_mem = [],raw_mem = [];
+$('#myModal').on('shown.bs.modal', function () {
+    $('#input-data').focus();
+    $('#input-data').select();
+    $('#myModal').keydown(function(e){
+        if(event.which==13){
+            $('#save_button').click();
+        }
+    });
+})
+$('#save_as-modal').on('shown.bs.modal', function () {
+    $('#save_as-name').focus();
+    $('#save_as-name').select();
+})
+$(function(){
+    $('#save_as-modal').keydown(function(e){
+        if(event.which==13){
+            $('#save_as-button').click();
+        }
+    });
+});
+$(function(){
+    // 文字入力ファンクション
+    function addStr(id, str){
+        var obj = document.getElementById(id); // オブジェクト取得
+        var sPos = obj.selectionStart;        // 文字入力最初位置取得
+        var ePos = obj.selectionEnd;          // 文字入力最後位置取得
+        // 指定された文字を入力する
+        var addStr  = obj.value.substr(0, sPos) + str + obj.value.substr(ePos);
+ 
+        var cPos = sPos + str.length;
+        jQuery(obj).val(addStr);    // 対象の値を変更
+        obj.setSelectionRange(cPos, cPos); // 文字選択状態を初期の状態へ  
+    }
+    $("#text-data")
+    // フォーカス時の設定
+    .focus(function(){
+        window.document.onkeydown = function(e){
+            if(e.keyCode === 9) {   // 9 = Tab
+                addStr(this.activeElement.id, "\t");// \t = タブ
+                e.preventDefault(); // デフォルト動作停止
+            }
+        }
+    })
+    // フォーカスが外れた時の設定
+    .blur(function(){
+        // 通常の動作を行うように再設定
+        window.document.onkeydown = function(e){
+            return true;
+        }
+    });
+    $(window).keydown(function(e) {//save
+	//console.log(e);//打印event，观察各属性，代替查阅文档，调试用。
+        if (e.keyCode == 83 && e.ctrlKey && !e.shiftKey) {
+            e.preventDefault();
+            //dosomething
+            $('#save-text').click();
+        }
+    });
+    $(window).keydown(function(e) {//save as
+	//console.log(e);//打印event，观察各属性，代替查阅文档，调试用。
+        if (e.keyCode == 83 && e.ctrlKey && e.shiftKey) {
+            e.preventDefault();
+            //dosomething
+            $('#save_as-text').click();
+        }
+    });
+    $(window).keydown(function(e) {//load
+	//console.log(e);//打印event，观察各属性，代替查阅文档，调试用。
+        if (e.keyCode == 76 && e.ctrlKey) {
+            e.preventDefault();
+            //dosomething
+            $('#load-text').click();
+        }
+    });
+    $(window).keydown(function(e) {//
+	//console.log(e);//打印event，观察各属性，代替查阅文档，调试用。
+        if (e.keyCode == 81 && e.ctrlKey) {//q
+            e.preventDefault();
+            //dosomething
+            go = 0;
+        }
+    });
+    $(window).keydown(function(e) {//
+    //console.log(e);//打印event，观察各属性，代替查阅文档，调试用。
+        if (e.keyCode == 71 && e.ctrlKey) {//g
+            e.preventDefault();
+            //dosomething
+            execute_step();
+        }
+    });
+    $(window).keydown(function(e) {//
+    //console.log(e);//打印event，观察各属性，代替查阅文档，调试用。
+        if (e.keyCode == 82 && e.ctrlKey) {//g
+            e.preventDefault();
+            //dosomething
+            execute_till_breakpoint();
+        }
+    });
+});
+
+
+</script>
+</body>
+
+</html>

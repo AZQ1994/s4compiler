@@ -683,7 +683,11 @@ function write_words(){
         }else if(d[0]=='@'){
             mem[count++] = d.substring(1);
         }else{
-            mem[count++] = $('.label_'+d).attr('id').substring(1);
+            let i = $('.label_'+d).attr('id');
+            if (i==undefined){
+                console.log(this,d);
+            }
+            mem[count++] = i.substring(1);
         }
     });
     $('.data').each(function(){
