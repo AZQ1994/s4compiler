@@ -2,7 +2,7 @@
 from instruction import Instruction
 from instr_transform import instrTransform, funcDict, build_methods, sysTransform
 from memory import WordManager
-from memory import Word
+from memory import Word, Words
 #from memory import MemoryNode
 from list_node import ListNode
 #from subneg4_list_node import Subneg4ListNode
@@ -123,9 +123,13 @@ class analyze:
 					}
 				current = current.next
 				continue
+			n = None
 			if current.ins.instrStr in instrTransform:
-				instrTransform[current.ins.instrStr](current, self.WM, self.LM)
-			current = current.next
+				n = instrTransform[current.ins.instrStr](current, self.WM, self.LM)
+			if n == None:
+				current = current.next
+			else:
+				current = n
 		
 		current = self.startNode
 		while current != None:
@@ -167,6 +171,8 @@ class analyze:
 				#print value
 				value.label = "V"+str(count)
 				count += 1
+			elif type(value) == Words:
+				pass
 			else:
 				print "what????"+str(value)+"  "+str(type(value))
 		for key, value in self.WM.wordDataPtrDict.items():
@@ -192,9 +198,12 @@ class analyze:
 #print "***************"
 #print p.functions
 #print "***************"
+#a = analyze("test/test_code_void/void.xml")
+#a = analyze("test/test_code_04/fib.xml")
 #a = analyze("test/test_code_quick/mips-quick-test.o0.xml")
+a = analyze("test/test_code_quick/mips-quick.o0.xml")
 #a = analyze("test/debug/test.xml")
-a = analyze("test/test_code_quick/mips-quick-test.a.xml")
+#a = analyze("test/test_code_quick/mips-quick-test.a.xml")
 #a = analyze("test/test_code_01/plus.o0.xml")
 #a.printNodes()
 #print "***************"

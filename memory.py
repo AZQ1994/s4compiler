@@ -288,7 +288,16 @@ class WordManager(object):
 				label = "-".join(l[:-1]) + "-" + str(int(l[1])+1)
 		self.wordDataDict[label] = Words(values, self, label)
 		return self.wordDataDict[label]
-
+	def newDataLabel(self, label, namespace=True):
+		if namespace:
+			label = self.getNamespace() + label
+		while self.wordDataDict.has_key(label) or self.wordDataPtrDict.has_key(label):
+			l = label.split("-")
+			if len(l) == 1:
+				label = l[0] + "-1"
+			else:
+				label = "-".join(l[:-1]) + "-" + str(int(l[1])+1)
+		return label
 	def addDataWord(self, value, label, namespace=True, type_="data"):
 		if namespace:
 			label = self.getNamespace() + label
@@ -358,7 +367,7 @@ class WordManager(object):
 
 	def dataMem(self):
 		for key, value in self.wordDataDict.items():
-			if type(value) == Word and value.getType() != "data-words":
+			if type(value) == Word and value.getType() != "data-ptr" and value.getType() != "data-words":
 				print value
 			if type(value) == Words:
 				print value.name+": "+value.getStr()

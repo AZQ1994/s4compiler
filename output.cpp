@@ -2855,7 +2855,7 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
       Out << " des=\"r-" << SlotNum << "\"";
     }
   }
-
+/* TODO
   if (const CallInst *CI = dyn_cast<CallInst>(&I)) {
     if (CI->isMustTailCall())
       Out << "musttail ";
@@ -2864,7 +2864,7 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
     else if (CI->isNoTailCall())
       Out << "notail ";
   }
-
+*/
   // Print out the opcode...
   Out << " opName=\"" << I.getOpcodeName();
   // Print out the compare instruction predicates
@@ -3007,7 +3007,7 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
     }
     Out << ']';
   } else if (isa<ReturnInst>(I) && !Operand) {
-    Out << " void";
+    Out << " returnType=\"void\"";
   } else if (const auto *CRI = dyn_cast<CatchReturnInst>(&I)) {
     Out << " from ";
     writeOperand(CRI->getOperand(0), /*PrintType=*/false);
