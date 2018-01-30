@@ -1,5 +1,5 @@
-; ModuleID = 'test/test_code_quick/mips-quick-test.c'
-source_filename = "test/test_code_quick/mips-quick-test.c"
+; ModuleID = 'test_code_quick/mips-quick-test.c'
+source_filename = "test_code_quick/mips-quick-test.c"
 target datalayout = "e-p:32:32-i64:64-v16:16-v32:32-n16:32:64"
 target triple = "nvptx"
 

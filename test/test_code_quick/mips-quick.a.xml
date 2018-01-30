@@ -1,6 +1,6 @@
 <Module>
-  <!-- ; ModuleID = 'test/test_code_quick/mips-quick.a.bc' -->
-  <!-- source_filename = " test/test_code_quick/mips-quick.c  "-->
+  <!-- ; ModuleID = 'test_code_quick/mips-quick.a.bc' -->
+  <!-- source_filename = " test_code_quick/mips-quick.c  "-->
   <!-- target datalayout = "e-p:32:32-i64:64-v16:16-v32:32-n16:32:64" -->
   <!-- target triple = "nvptx" -->
   <Globals>
@@ -29,6 +29,7 @@
         <Instruction des="last.0.ph.reg2mem17" opName="alloca"  allocaType="i32" />
         <Instruction des="i.0.in.ph.reg2mem19" opName="alloca"  allocaType="i32" />
         <Instruction des="add15.pn.reg2mem21" opName="alloca"  allocaType="i32" />
+        <Instruction des=""reg2mem alloca point"" opName="bitcast" [i32]0 to i32 />
         <Instruction des="cmp46" opName="icmp_slt" type="i32" operands="left,right" />
         <Instruction opName="br" operands="[i1]cmp46, [label]for.cond.preheader.preheader, [label]entry.cleanup_crit_edge" />
       </BasicBlock>
@@ -144,6 +145,7 @@
     </Arguments>
     <BasicBlocks>
       <BasicBlock name="entry">
+        <Instruction des=""reg2mem alloca point"" opName="bitcast" [i32]0 to i32 />
         <Instruction des="call" opName="call" functionType="i32" operands="quick, [i32]0, [i32]19999" />
         <Instruction opName="ret" operands="[i32]0" />
       </BasicBlock>
