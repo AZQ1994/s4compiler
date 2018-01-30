@@ -2946,7 +2946,7 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
     for (unsigned op = 0, Eop = PN->getNumIncomingValues(); op < Eop; ++op) {
       if (op) Out << ",";
       Out << "[";
-      writeOperand(PN->getIncomingValue(op), false); Out << ",";
+      writeOperand(PN->getIncomingValue(op), false); Out << ":";
       writeOperand(PN->getIncomingBlock(op), false); Out << "]";
     }
     Out << "\"";
