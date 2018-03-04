@@ -28,7 +28,7 @@
         <Instruction opName="br" type="label" operands="for.cond1.preheader" />
       </BasicBlock>
       <BasicBlock name="for.cond1.preheader">
-        <Instruction des="i.032" opName="phi" type="i32" values="[inc,for.inc13],[0,for.cond1.preheader.preheader]" />
+        <Instruction des="i.032" opName="phi" type="i32" values="[inc:for.inc13],[0:for.cond1.preheader.preheader]" />
         <Instruction des="cmp228" opName="icmp_sgt" type="i32" operands="j.027,i.032" />
         <Instruction opName="br" operands="[i1]cmp228, [label]for.body3.preheader, [label]for.inc13" />
       </BasicBlock>
@@ -56,8 +56,8 @@
         <Instruction opName="br" type="label" operands="for.body3.prol.loopexit.unr-lcssa" />
       </BasicBlock>
       <BasicBlock name="for.body3.prol.loopexit.unr-lcssa">
-        <Instruction des="j.030.unr.ph" opName="phi" type="i32" values="[j.0.prol,for.cond1.backedge.prol],[j.027,for.body3.preheader]" />
-        <Instruction des="j.0.in29.unr.ph" opName="phi" type="i32" values="[j.027,for.cond1.backedge.prol],[r-0,for.body3.preheader]" />
+        <Instruction des="j.030.unr.ph" opName="phi" type="i32" values="[j.0.prol:for.cond1.backedge.prol],[j.027:for.body3.preheader]" />
+        <Instruction des="j.0.in29.unr.ph" opName="phi" type="i32" values="[j.027:for.cond1.backedge.prol],[r-0:for.body3.preheader]" />
         <Instruction opName="br" type="label" operands="for.body3.prol.loopexit" />
       </BasicBlock>
       <BasicBlock name="for.body3.prol.loopexit">
@@ -68,8 +68,8 @@
         <Instruction opName="br" type="label" operands="for.body3" />
       </BasicBlock>
       <BasicBlock name="for.body3">
-        <Instruction des="j.030" opName="phi" type="i32" values="[j.030.unr.ph,for.body3.preheader.new],[j.0.1,for.cond1.backedge.1]" />
-        <Instruction des="j.0.in29" opName="phi" type="i32" values="[j.0.in29.unr.ph,for.body3.preheader.new],[j.0,for.cond1.backedge.1]" />
+        <Instruction des="j.030" opName="phi" type="i32" values="[j.030.unr.ph:for.body3.preheader.new],[j.0.1:for.cond1.backedge.1]" />
+        <Instruction des="j.0.in29" opName="phi" type="i32" values="[j.0.in29.unr.ph:for.body3.preheader.new],[j.0:for.cond1.backedge.1]" />
         <Instruction des="arrayidx" opName="getelementptr" type="[20 x i32]" operands="[[20 x i32]*]N,[i32]0,[i32]j.030" />
         <Instruction des="r-6" opName="load" loadType="i32" type="i32*" operands="arrayidx" />
         <Instruction des="sub4" opName="add" type="i32" operands="j.0.in29,-2" />

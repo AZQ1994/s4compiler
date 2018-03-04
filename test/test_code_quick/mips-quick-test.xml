@@ -22,18 +22,18 @@
         <Instruction opName="br" type="label" operands="for.cond.preheader" />
       </BasicBlock>
       <BasicBlock name="for.cond.preheader">
-        <Instruction des="add15.pn" opName="phi" type="i32" values="[add15,for.end],[left,for.cond.preheader.preheader]" />
+        <Instruction des="add15.pn" opName="phi" type="i32" values="[add15:for.end],[left:for.cond.preheader.preheader]" />
         <Instruction des=".in" opName="getelementptr" type="[20 x i32]" operands="[[20 x i32]*]data,[i32]0,[i32]add15.pn" />
         <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands=".in" />
         <Instruction opName="br" type="label" operands="for.cond.outer" />
       </BasicBlock>
       <BasicBlock name="for.cond.outer">
-        <Instruction des="i.0.in.ph" opName="phi" type="i32" values="[add15.pn,for.cond.preheader],[i.0,if.then4]" />
-        <Instruction des="last.0.ph" opName="phi" type="i32" values="[add15.pn,for.cond.preheader],[inc.le,if.then4]" />
+        <Instruction des="i.0.in.ph" opName="phi" type="i32" values="[add15.pn:for.cond.preheader],[i.0:if.then4]" />
+        <Instruction des="last.0.ph" opName="phi" type="i32" values="[add15.pn:for.cond.preheader],[inc.le:if.then4]" />
         <Instruction opName="br" type="label" operands="for.cond" />
       </BasicBlock>
       <BasicBlock name="for.cond">
-        <Instruction des="i.0.in" opName="phi" type="i32" values="[i.0,for.body],[i.0.in.ph,for.cond.outer]" />
+        <Instruction des="i.0.in" opName="phi" type="i32" values="[i.0:for.body],[i.0.in.ph:for.cond.outer]" />
         <Instruction des="i.0" opName="add" type="i32" operands="i.0.in,1" />
         <Instruction des="cmp1" opName="icmp_slt" type="i32" operands="i.0.in,right" />
         <Instruction opName="br" operands="[i1]cmp1, [label]for.body, [label]for.end" />
@@ -59,7 +59,7 @@
         <Instruction opName="store" operands="[i32]r-4,[i32*].in" />
         <Instruction opName="store" operands="[i32]r-3,[i32*]arrayidx12" />
         <Instruction des="sub" opName="add" type="i32" operands="last.0.ph,-1" />
-        <Instruction des="call"  opName="call" functionType="i32" operands="quick, [i32]add15.pn, [i32]sub" />
+        <Instruction des="call" opName="call" functionType="i32" operands="quick, [i32]add15.pn, [i32]sub" />
         <Instruction des="add15" opName="add" type="i32" operands="last.0.ph,1" />
         <Instruction des="cmp" opName="icmp_slt" type="i32" operands="add15,right" />
         <Instruction opName="br" operands="[i1]cmp, [label]for.cond.preheader, [label]cleanup.loopexit" />
@@ -79,7 +79,7 @@
     </Arguments>
     <BasicBlocks>
       <BasicBlock name="entry">
-        <Instruction des="call"  opName="call" functionType="i32" operands="quick, [i32]0, [i32]19" />
+        <Instruction des="call" opName="call" functionType="i32" operands="quick, [i32]0, [i32]19" />
         <Instruction opName="ret" operands="[i32]0" />
       </BasicBlock>
     </BasicBlocks>

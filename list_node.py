@@ -1,3 +1,4 @@
+from label import Label
 class ListNode(object):
 	def __init__(self, ins, label = None, sys = False, opt = None):
 		self.ins = ins
@@ -105,5 +106,7 @@ class ListNode(object):
 	def addLabel(self, label):
 		self.label.append(label)
 		
+	def labelStringArray(self):
+		return [x.name if type(x)==Label else x for x in self.label]
 	def __repr__(self):
 		return str(self.label_string()) + ":\t" + str(self.ins) if not self.sys else ""

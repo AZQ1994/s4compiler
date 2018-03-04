@@ -91,6 +91,8 @@ class CodeParser2(object):
 		tree = ET.parse(filename)
 		module = tree.getroot()
 
+		phi_op_pattern = re.compile("\[(.*?):(.*?)\]")
+
 		for item1 in module:
 			# functions and global variables
 			#print "- ",item1.tag,": ",item1.attrib
@@ -119,16 +121,54 @@ class CodeParser2(object):
 
 				WM.functionInfo["_".join(WM.getNamespace(False))] = args
 				append_node = append_node.append(ListNode("function", sys = True, opt=args))
-
 				for BB in item1[1]:
-					label_next.append(WM.getNamespace()+BB.get("name").replace(".","_"))	# basic block
+					BB_name = BB.get("name").replace(".","_")
+					phi = {} #{from:{var: from_var}}
+					for I in BB:
+						ins_name = I.get("opName")
+						if ins_name != "phi":
+							break
+						ins_des = I.get("des").replace(".","_")
 
-					WM.pushNamespace(BB.get("name").replace(".","_"))
+						op = I.get("values").replace(".","_")
+						
+						for op_string in op.split(","):
+							res = phi_op_pattern.match(op_string)
+							if phi.has_key(res.group(2)):
+								phi[res.group(2)][ins_des] = res.group(1)
+							else:
+								phi[res.group(2)] = {ins_des : res.group(1)}
+					
+					WM.phi[BB_name] = phi
+					
+				for BB in item1[1]:
+					BB_name = BB.get("name").replace(".","_")
+					label_next.append(WM.getNamespace()+BB_name)	# basic block
+
+					WM.pushNamespace(BB_name)
 					append_node = append_node.append(ListNode("namespace", sys = True, opt=WM.getNamespace(False)))
 					append_node = append_node.append(ListNode("bb_begin", sys = True, opt=WM.getNamespace(False)))
+					
+					#print phi
+					for l,f_bb in WM.phi[BB_name].items():
+						l = "phi_"+BB_name+"-"+l
+						for var, from_var in f_bb.items():
+							if check_int(var):
+								w_var = WM.const(var)
+							else:
+								w_var = WM.getName(var)
+							if check_int(from_var):
+								w_from_var = WM.const(from_var)
+							else:
+								w_from_var = WM.getName(from_var)
+							append_node = append_node.append(LM.new(ListNode(Instruction("load", [w_var, w_from_var]),l)))
+							l = None
+						append_node = append_node.append(LM.new(ListNode(Instruction("br", [WM.label(WM.getUpperNamespace()+BB.get("name").replace(".","_"))]),l)))
 					for I in BB: # instruction
 						############### des + params TODO
 						ins_name = I.get("opName")
+						if ins_name == "phi":
+							continue
 						ins_params = [] if I.get("operands") == None else re.sub(r'\[.*?(\[.*?\])?.*?\]','', I.get("operands")).replace(" ","").replace(".","_").split(",")##################TODO
 						ins_des = None if I.get("des") == None else I.get("des").replace(".","_")
 						ins = Instruction(ins_name, [ins_des]+ins_params if ins_des != None else ins_params)
@@ -140,7 +180,7 @@ class CodeParser2(object):
 							append_node = append_node.append(LM.new(ListNode(ins)))
 						
 						if append_node.ins.instrStr in build_methods:
-							params = build_methods[append_node.ins.instrStr](append_node.ins.params, WM, I)
+							params = build_methods[append_node.ins.instrStr](append_node.ins.params, WM, I, BB_name)
 						else:
 							params = []
 							for x in append_node.ins.params:

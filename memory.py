@@ -204,6 +204,7 @@ class WordManager(object):
 		}
 		self.result = self.addDataWord(0, "d_return_data")
 		self.LM = LM
+		self.phi = {}
 	def addNeedSave(self, w):
 		self.needSave[w]=False
 

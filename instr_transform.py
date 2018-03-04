@@ -28,7 +28,7 @@ def check_int(s):
         return s[1:].isdigit()
     return s.isdigit()
 
-def build_getelementptr(ins_params, WM, I):
+def build_getelementptr(ins_params, WM, I, BB_name):
 	params = []
 	#print "::::::::::::::::::::",ins_params
 	if len(ins_params) != 4:
@@ -49,10 +49,19 @@ def build_getelementptr(ins_params, WM, I):
 
 	return params
 
-def build_br(ins_params, WM, I):
+def build_br(ins_params, WM, I, BB_name):
 	params = []
 	if len(ins_params)==1:
-		word = WM.label(WM.getUpperNamespace()+ins_params[0])
+		#print ins_params[0], BB_name, WM.phi#!!!!!!!!
+		if WM.phi.has_key(ins_params[0]):
+			if WM.phi[ins_params[0]].has_key(BB_name):
+				word = WM.label( "phi_"+ins_params[0]+"-"+BB_name )
+				#print word
+			else:
+				word = WM.label(WM.getUpperNamespace()+ins_params[0])
+				#print "WARNING", BB_name, ins_params[0]
+		else:
+			word = WM.label(WM.getUpperNamespace()+ins_params[0])
 		params.append(word)
 		return params
 
@@ -63,14 +72,28 @@ def build_br(ins_params, WM, I):
 		params.append(WM.getName(ins_params[0]))
 
 	# ins_params[1]
-	word = WM.label(WM.getUpperNamespace()+ins_params[1])
+	if WM.phi.has_key(ins_params[1]):
+		if WM.phi[ins_params[1]].has_key(BB_name):
+			word = WM.label( "phi_"+ins_params[1]+"-"+BB_name )
+		else:
+			#print "WARNING!!!!!!",BB_name,ins_params[1]
+			word = WM.label(WM.getUpperNamespace()+ins_params[1])
+	else:
+		word = WM.label(WM.getUpperNamespace()+ins_params[1])
 	params.append(word)
 	# ins_params[2]
-	word = WM.label(WM.getUpperNamespace()+ins_params[2])
+	if WM.phi.has_key(ins_params[2]):
+		if WM.phi[ins_params[2]].has_key(BB_name):
+			word = WM.label( "phi_"+ins_params[2]+"-"+BB_name )
+		else:
+			#print "WARNING!!!!!!",BB_name,ins_params[2]
+			word = WM.label(WM.getUpperNamespace()+ins_params[2])
+	else:
+		word = WM.label(WM.getUpperNamespace()+ins_params[2])
 	params.append(word)
 	return params
 
-def build_call(ins_params, WM, I):
+def build_call(ins_params, WM, I, BB_name):
 	call_params = []
 	params = []
 
@@ -293,7 +316,7 @@ def trans_load(LN, WM, LM):
 
 	WM.addNeedSave(param0)
 
-	if param1.type == "ptr-cal":
+	if param1.type == "ptr-cal" or param1.type == "data-ptr":
 		WRITE = WM.addDataPtrWord(0, "load_p")
 		LN1 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
@@ -329,7 +352,7 @@ def trans_store(LN, WM, LM):
 
 	WM.addNeedSave(param1)
 
-	if param1.type == "ptr-cal":
+	if param1.type == "ptr-cal" or param1.type == "data-ptr":
 		WRITE = WM.addDataPtrWord(0, "store_p")
 		LN1 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
@@ -364,6 +387,14 @@ def trans_br(LN, WM, LM):
 	c_m1 = WM.const(-1)
 
 	if len(LN.ins.params) == 1:
+		#print LN.ins.params[0].value , LN.getNextInst().labelStringArray()
+		if LN.ins.params[0].value in LN.getNextInst().labelStringArray():
+			#print "hit", LN.ins.params[0].value
+			#todo label
+			n = LN.getNextInst()
+			n.label = n.label + LN.label
+			LN.remove()
+			return n
 		LN1 = LM.new(ListNode(Subneg4Instruction(
 			c_0.getPtr(),
 			c_m1.getPtr(),

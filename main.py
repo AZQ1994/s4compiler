@@ -201,12 +201,15 @@ class analyze:
 #a = analyze("test/test_code_void/void.xml")
 #a = analyze("test/test_code_04/fib.xml")
 #a = analyze("test/test_code_quick/mips-quick-test.o0.xml")
-a = analyze("test/test_code_quick/mips-quick.o0.xml")
+#a = analyze("test/test_code_quick/mips-quick.o0.xml")
 #a = analyze("test/debug/test.xml")
-#a = analyze("test/test_code_quick/mips-quick-test.a.xml")
+#a = analyze("test/test_code_quick/mips-quick-test.xml")
+a = analyze("test/test_code_quick/mips-quick.xml")
+#a = analyze("test/test_code_bubble_sort/bubble.xml")
 #a = analyze("test/test_code_01/plus.o0.xml")
 #a.printNodes()
 #print "***************"
+#print a.WM.phi
 a.convert()
 #print "***************"
 #a.opt_label()
