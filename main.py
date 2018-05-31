@@ -10,7 +10,7 @@ from label import LabelManager
 from label import Label
 #from code_parser import CodeParser2
 
-from graph import Graph
+#from graph import Graph
 
 import re
 
