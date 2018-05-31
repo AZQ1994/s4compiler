@@ -347,8 +347,8 @@ class analyze:
 backend = Backend("test/test_code_quick/mips-quick-test.o3.xml")
 #backend = Backend("test/test_code_quick/quick.xml")
 backend.buildPass()
-backend.printNodes(True)
-print " ################################################# "
+#backend.printNodes(True)
+#print " ################################################# "
 backend.transformPass()
 backend.optimizePass()
 backend.convertPass()
