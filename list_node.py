@@ -109,4 +109,4 @@ class ListNode(object):
 	def labelStringArray(self):
 		return [x.name if type(x)==Label else x for x in self.label]
 	def __repr__(self):
-		return str(self.label_string()) + ":\t" + str(self.ins) if not self.sys else ""
+		return str(self.label_string()) + ":\t" + str(self.ins) if not self.sys else "// sys: "+str(self.ins)+"\t"+str(self.opt)

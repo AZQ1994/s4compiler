@@ -13,9 +13,10 @@ print argvs[0], path, filename
 
 f = open(argvs[1],"r")
 lines = f.readlines()
-
-mem = [int(x) for x in lines]
-
+import re
+p1 = re.compile("#.*?$")
+mem = [int(re.sub(p1,"",x).strip()) for x in lines]
+print zip(range(300),mem[:300])
 pc = 0
 count = 0
 while pc >= 0:
@@ -23,7 +24,7 @@ while pc >= 0:
 	b = mem[pc+1]
 	c = mem[pc+2]
 	d = mem[pc+3]
-
+	#print pc, a,b,c,d
 	mem_a = mem[a]
 	mem_b = mem[b]
 	mem_c = mem[c]

@@ -1,6 +1,6 @@
 # coding=UTF-8
 
-from instruction import Instruction, Subneg4Instruction
+from instruction import Instruction, Subneg4Instruction, PseudoInstruction, P_SUB, P_ADD, P_GOTO
 from list_node import ListNode
 from label import Label
 
@@ -159,6 +159,7 @@ def trans_getelementptr(LN, WM, LM):
 				WM.turnWordIntoWord(param0, w)
 				
 				nextParam0 = nextLN.ins.params[0]
+				"""
 				LN1 = LM.new(ListNode(Subneg4Instruction(
 						param3.getPtr(),
 						c_0.getPtr(),
@@ -173,6 +174,13 @@ def trans_getelementptr(LN, WM, LM):
 						NEXT,
 						"\t// test"
 					)))
+				"""
+				LN1 = LM.new(ListNode(P_ADD(
+						param3.getPtr(),
+						p1addr.getPtr(),
+						param0.getPtr(),
+						"\t// getelementptr"
+					)))
 				LN3 = LM.new(ListNode(Subneg4Instruction(
 						c_0.getPtr(),
 						param0,
@@ -180,7 +188,8 @@ def trans_getelementptr(LN, WM, LM):
 						NEXT,
 						"\t// load element ptr"
 					)))
-				LN.replace(LM, LN1, LN2, LN3)
+				#LN.replace(LM, LN1, LN2, LN3)
+				LN.replace(LM, LN1, LN3)
 				WM.addNeedSave(param0)
 				nextLN.remove()
 				return LN3.getNextInst()
@@ -395,10 +404,7 @@ def trans_br(LN, WM, LM):
 			n.label = n.label + LN.label
 			LN.remove()
 			return n
-		LN1 = LM.new(ListNode(Subneg4Instruction(
-			c_0.getPtr(),
-			c_m1.getPtr(),
-			temp.getPtr(),
+		LN1 = LM.new(ListNode(P_GOTO(
 			LN.ins.params[0],
 			"\t// br %s"%LN.ins.params[0]
 		)))
@@ -415,10 +421,7 @@ def trans_br(LN, WM, LM):
 			LN.ins.params[2],
 			"\t// br"
 		)))
-		LN2 = LM.new(ListNode(Subneg4Instruction(
-			c_0.getPtr(),
-			c_m1.getPtr(),
-			temp.getPtr(),
+		LN2 = LM.new(ListNode(P_GOTO(
 			LN.ins.params[1] 
 		)))
 		LN.replace(LM, LN1, LN2)
@@ -480,11 +483,8 @@ def trans_call(LN, WM, LM):
 	#print "!!!!!!!!!!",LN,after_stack_node
 	backAddress = WM.addDataWord(WM.label((after_stack_node+[LN2])[0].getALabel()),"nextLabel")
 
-	LN1 = LM.new(ListNode(Subneg4Instruction(
+	LN1 = LM.new(ListNode(P_GOTO(
 		# 0, -1, temp, goto function
-		c_0.getPtr(),
-		c_m1.getPtr(),
-		temp.getPtr(),
 		LN.ins.params[2],
 		"\t// call %s"%LN.ins.params[2]
 	)))
@@ -541,10 +541,7 @@ need to loop the conversion or create another way
 		NEXT,
 		">>> return data: $(2), $(res)\\n"
 	)))
-	LN3 = LM.new(ListNode(Subneg4Instruction(
-		c_0.getPtr(),
-		c_m1.getPtr(),
-		temp.getPtr(),
+	LN3 = LM.new(ListNode(P_GOTO(
 		address,
 		"\t// ret"
 	)))
@@ -575,16 +572,10 @@ def trans_icmp_sle(LN, WM, LM):
 				temp = WM.getTemp(0)
 				NEXT = WM.getNext()
 
-				LN5 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN5 = LM.new(ListNode(P_GOTO(
 					goto1
 				)))
-				LN2 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN2 = LM.new(ListNode(P_GOTO(
 					goto2
 				)))
 				LN4 = LM.new(ListNode(Subneg4Instruction(
@@ -711,16 +702,10 @@ def trans_icmp_sge(LN, WM, LM):
 				temp = WM.getTemp(0)
 				NEXT = WM.getNext()
 
-				LN5 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN5 = LM.new(ListNode(P_GOTO(
 					goto1
 				)))
-				LN2 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN2 = LM.new(ListNode(P_GOTO(
 					goto2
 				)))
 				LN4 = LM.new(ListNode(Subneg4Instruction(
@@ -875,16 +860,10 @@ def trans_icmp_slt(LN, WM, LM):
 				temp = WM.getTemp(0)
 				NEXT = WM.getNext()
 
-				LN8 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN8 = LM.new(ListNode(P_GOTO(
 					goto1
 				)))
-				LN5 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN5 = LM.new(ListNode(P_GOTO(
 					goto1
 				)))
 				LN3 = LM.new(ListNode(Subneg4Instruction(
@@ -899,10 +878,7 @@ def trans_icmp_slt(LN, WM, LM):
 					temp.getPtr(),
 					WM.label(LN3.getALabel())
 				)))
-				LN4 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN4 = LM.new(ListNode(P_GOTO(
 					goto2
 				)))
 				LN2 = LM.new(ListNode(Subneg4Instruction(
@@ -969,10 +945,7 @@ def trans_icmp_slt(LN, WM, LM):
 		temp.getPtr(),
 		WM.label(LN3.getALabel())
 	)))
-	LN6 = LM.new(ListNode(Subneg4Instruction(
-		c_0.getPtr(),
-		c_m1.getPtr(),
-		temp.getPtr(),
+	LN6 = LM.new(ListNode(P_GOTO(
 		WM.label(LN.getNextInst().getALabel())
 	)))
 	LN4 = LM.new(ListNode(Subneg4Instruction(
@@ -1020,16 +993,10 @@ def trans_icmp_sgt(LN, WM, LM):
 				temp = WM.getTemp(0)
 				NEXT = WM.getNext()
 
-				LN8 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN8 = LM.new(ListNode(P_GOTO(
 					goto1
 				)))
-				LN5 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN5 = LM.new(ListNode(P_GOTO(
 					goto1
 				)))
 				LN3 = LM.new(ListNode(Subneg4Instruction(
@@ -1044,10 +1011,7 @@ def trans_icmp_sgt(LN, WM, LM):
 					temp.getPtr(),
 					WM.label(LN3.getALabel())
 				)))
-				LN4 = LM.new(ListNode(Subneg4Instruction(
-					c_0.getPtr(),
-					c_m1.getPtr(),
-					temp.getPtr(),
+				LN4 = LM.new(ListNode(P_GOTO(
 					goto2
 				)))
 				LN2 = LM.new(ListNode(Subneg4Instruction(
@@ -1103,10 +1067,7 @@ def trans_icmp_sgt(LN, WM, LM):
 		temp.getPtr(),
 		WM.label(LN3.getALabel())
 	)))
-	LN6 = LM.new(ListNode(Subneg4Instruction(
-		c_0.getPtr(),
-		c_m1.getPtr(),
-		temp.getPtr(),
+	LN6 = LM.new(ListNode(P_GOTO(
 		WM.label(LN.getNextInst().getALabel())
 	)))
 	LN4 = LM.new(ListNode(Subneg4Instruction(
@@ -1691,8 +1652,76 @@ funcDict = {
 
 
 
+instrOpt = {
+	
+}
 
 
+def expand_p_add(LN, WM, LM):
+	# param0 = param1 + param2
+	temp = WM.getTemp(0)
+	param1 = LN.ins.params[1]
+	param2 = LN.ins.params[2]
+	param0 = LN.ins.params[0]
+	c_0 = WM.const(0)
+	NEXT = WM.getNext()
+
+	LN1 = LM.new(ListNode(Subneg4Instruction(
+			param1,
+			c_0.getPtr(),
+			temp.getPtr(),
+			NEXT,
+			LN.ins.comment
+		)))
+	LN2 = LM.new(ListNode(Subneg4Instruction(
+			temp.getPtr(),
+			param0,
+			param2,
+			NEXT
+		)))
+	LN.replace(LM, LN1, LN2)
+	return LN.getNextInst()
+def expand_p_sub(LN, WM, LM):
+	# param0 = param1 + param2
+	temp = WM.getTemp(0)
+	param1 = LN.ins.params[1]
+	param2 = LN.ins.params[2]
+	param0 = LN.ins.params[0]
+	c_0 = WM.const(0)
+	NEXT = WM.getNext()
+
+	LN1 = LM.new(ListNode(Subneg4Instruction(
+			param0,
+			param1,
+			param2,
+			NEXT,
+			LN.ins.comment
+		)))
+	LN.replace(LM, LN1)
+	return LN.getNextInst()
+def expand_p_goto(LN, WM, LM):
+	# param0 = param1 + param2
+	temp = WM.getTemp(0)
+	param0 = LN.ins.params[0]
+	c_0 = WM.const(0)
+	c_m1 = WM.const(-1)
+
+	LN1 = LM.new(ListNode(Subneg4Instruction(
+			c_0.getPtr(),
+			c_m1.getPtr(),
+			temp.getPtr(),
+			param0,
+			LN.ins.comment
+		)))
+	LN.replace(LM, LN1)
+	return LN.getNextInst()
+
+
+expandDict = {
+	"p_add": expand_p_add,
+	"p_sub": expand_p_sub,
+	"p_goto": expand_p_goto,
+}
 
 
 
