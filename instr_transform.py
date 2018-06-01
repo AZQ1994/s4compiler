@@ -509,7 +509,7 @@ def trans_call(LN, WM, LM):
 		)#copy params to arg
 	addrPushLN = LM.new(ListNode(Instruction("STACK_PUSH",[backAddress])))
 	WM.addNeedSave(LN.ins.params[0])
-	LN.replaceLNs(LM, stack_node + LNs + [addrPushLN, LN1] + after_stack_node + [LN2])
+	LN.replaceLNs(LM, stack_node + [addrPushLN] + LNs + [LN1] + after_stack_node + [LN2])
 	
 
 def trans_ret(LN, WM, LM):
@@ -1245,6 +1245,69 @@ def raw_stack_push(LN, WM, LM):
 		)))
 	]
 	LN.replaceLNs(LM, nodes)
+def raw_stack_push_s(LN, WM, LM):
+	c_0 = WM.const(0)
+	c_m1 = WM.const(-1)
+	NEXT = WM.getNext()
+
+	if not WM.hasFlag("stack_init"):
+		stack_init(WM)
+	base, pointer = WM.getFlag("stack_init")
+	
+	"""
+	param: a...
+	-1, pointer, p1
+	0, data1, p1:0
+	-1, p1, p2
+	0, data2, p2:0
+	"""
+	nodes = []
+	p = pointer
+	for key,param in enumerate(LN.ins.params):
+		p1 = WM.addDataPtrWord(0, "push_write")
+		if key == 0:
+			nodes.append(
+				LM.new(ListNode(Subneg4Instruction(
+					# 0, pointer, p1
+					c_0.getPtr(),
+					pointer.getPtr(),
+					p1.getPtr(),
+					NEXT
+				)))
+			)
+		else:
+			nodes.append(
+				LM.new(ListNode(Subneg4Instruction(
+					# -1, p, p1
+					c_m1.getPtr(),
+					p.getPtr(),
+					p1.getPtr(),
+					NEXT
+				)))
+			)
+		nodes.append(
+			LM.new(ListNode(Subneg4Instruction(
+				# 0, param, p1:0
+				c_0.getPtr(),
+				param.getPtr(),
+				p1,
+				NEXT
+			)))
+		)
+		p = p1
+	nodes.append(
+		LM.new(
+			ListNode(Subneg4Instruction(
+				# -1, p, pointer
+				c_m1.getPtr(),
+				p.getPtr(),
+				pointer.getPtr(),
+				NEXT
+			)))
+	)
+
+	LN.replaceLNs(LM, nodes)
+
 def stack_push(LN, WM, LM):
 	c_0 = WM.const(0)
 	c_m1 = WM.const(-1)
@@ -1325,6 +1388,54 @@ def raw_stack_pop(LN, WM, LM):
 		)))
 	]
 	LN.replaceLNs(LM, nodes)
+def raw_stack_pop_s(LN, WM, LM):
+	c_0 = WM.const(0)
+	c_1 = WM.const(1)
+	NEXT = WM.getNext()
+
+	if not WM.hasFlag("stack_init"):
+		stack_init(WM)
+	base, pointer = WM.getFlag("stack_init")
+
+
+	nodes = []
+	p = pointer
+	for key,param in enumerate(LN.ins.params):
+		p1 = WM.addDataPtrWord(0, "pop_write")
+	
+		nodes.append(
+			LM.new(ListNode(Subneg4Instruction(
+				# 1, p, p1
+				c_1.getPtr(),
+				p.getPtr(),
+				p1.getPtr(),
+				NEXT
+			)))
+		)
+		nodes.append(
+			LM.new(ListNode(Subneg4Instruction(
+				# 0, p1:0, param
+				c_0.getPtr(),
+				p1,
+				param.getPtr(),
+				NEXT
+			)))
+		)
+		p = p1
+	nodes.append(
+		LM.new(
+			ListNode(Subneg4Instruction(
+				# 0, p, pointer
+				c_0.getPtr(),
+				p.getPtr(),
+				pointer.getPtr(),
+				NEXT
+			)))
+	)
+
+	LN.replaceLNs(LM, nodes)
+
+
 def stack_pop(LN, WM, LM):
 	c_0 = WM.const(0)
 	c_m1 = WM.const(-1)
@@ -1633,7 +1744,9 @@ instrTransform = {
 
 sysTransform = {
 	"STACK_POP": raw_stack_pop,
-	"STACK_PUSH": raw_stack_push
+	"STACK_PUSH": raw_stack_push,
+	"STACK_POP_S": raw_stack_pop_s,
+	"STACK_PUSH_S": raw_stack_push_s
 }
 
 funcDict = {

@@ -231,6 +231,33 @@ class Backend(object):
 					if str(current.ins.params[0]) in next_inst.labelStringArray():
 						current.remove()
 			current = current.next
+		# stack push combine
+		current = self.startNode
+		while current != None:
+			if not current.sys and (current.ins.instrStr == "STACK_PUSH" or current.ins.instrStr == "STACK_PUSH_S"):
+				next_inst = current.getNextInst()
+				if next_inst != None:
+					if next_inst.ins.instrStr == "STACK_PUSH" or next_inst.ins.instrStr == "STACK_PUSH_S":
+						new_LN = self.LM.new(ListNode(Instruction("STACK_PUSH_S",current.ins.params+next_inst.ins.params)))
+						next_inst.replace(self.LM, new_LN)
+						current.remove()
+						current = new_LN.prev
+
+			current = current.next
+		# stack pop conbine
+		current = self.startNode
+		while current != None:
+			if not current.sys and (current.ins.instrStr == "STACK_POP" or current.ins.instrStr == "STACK_POP"):
+				next_inst = current.getNextInst()
+				if next_inst != None:
+					if next_inst.ins.instrStr == "STACK_POP" or next_inst.ins.instrStr == "STACK_POP":
+						new_LN = self.LM.new(ListNode(Instruction("STACK_POP_S",current.ins.params+next_inst.ins.params)))
+						next_inst.replace(self.LM, new_LN)
+						current.remove()
+						current = new_LN.prev
+
+			current = current.next
+
 		pass
 
 	def convertPass(self):
@@ -343,8 +370,8 @@ class analyze:
 				print "what????"+str(value)+"  "+str(type(value))
 
 
-#backend = Backend("test/test_code_quick/mips-quick.xml")
-backend = Backend("test/test_code_quick/mips-quick-test.o3.xml")
+backend = Backend("test/test_code_quick/mips-quick.xml")
+#backend = Backend("test/test_code_quick/mips-quick-test.o3.xml")
 #backend = Backend("test/test_code_quick/quick.xml")
 backend.buildPass()
 #backend.printNodes(True)
