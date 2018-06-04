@@ -16,10 +16,11 @@ lines = f.readlines()
 import re
 p1 = re.compile("#.*?$")
 mem = [int(re.sub(p1,"",x).strip()) for x in lines]
-print zip(range(300),mem[:300])
+#print zip(range(300),mem[:300])
 pc = 0
 count = 0
 while pc >= 0:
+	#print pc
 	a = mem[pc]
 	b = mem[pc+1]
 	c = mem[pc+2]
