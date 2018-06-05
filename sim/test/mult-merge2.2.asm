@@ -11,9 +11,7 @@
 L0: FLAG1, -1, temp, L0
 0, OUTPUT1, A
 0, 0, FLAG1
--1 ,C1, C1
--1 ,C1, C1
--1 ,C2, C2
+
 
 B_changed:
 
@@ -31,7 +29,7 @@ L_B_A:
 
 B_changed_fin:
 -1 ,C2, C2, B_changed
-0, -1, temp, B_FINISHED
+0, -1, temp, B_FINISHED_p
 
 
 
@@ -53,7 +51,10 @@ A_changed_fin:
 
 
 
-
+A_FINISHED_p:
+0, B, SHARED_OUT
+-1 ,C2, C2, A_FINISHED
+0, -1, temp, HALT
 A_FINISHED:
 FLAG2, -1, temp, A_FINISHED
 0, OUTPUT2, SHARED_OUT
@@ -61,6 +62,10 @@ FLAG2, -1, temp, A_FINISHED
 -1 ,C2, C2, A_FINISHED
 0, -1, temp, HALT
 
+B_FINISHED_p:
+0, A, SHARED_OUT
+-1 ,C1, C1, B_FINISHED
+0, -1, temp, HALT
 B_FINISHED:
 FLAG1, -1, temp, B_FINISHED
 0, OUTPUT1, SHARED_OUT
