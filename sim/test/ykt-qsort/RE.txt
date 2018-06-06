@@ -1,0 +1,12 @@
+^\s*.variable\s*(\S+)\s*=\s*(\S+)\s*;     .constant (\S*) = (\S+)
+$1:$2
+
+^\s*.variable\s*(\S+)\s*\s*;
+$1:0
+
+OUT_BUFF
+SHARED_OUT
+
+£»
+
+

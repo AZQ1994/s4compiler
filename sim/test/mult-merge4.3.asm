@@ -2,15 +2,14 @@
 // core 2: CD
 // core 3: ABCD
 // core 4: WRITE
-
--4999: -4999
--9999:-9999
-
-bp1: &buf1_start
+-19999:-19999
+-14999:-14999
+0, -1, temp, HALT
+bp2: &buf2_start
 C: -5000
 
--4999, data_start, A_POINTER
--9999, data_start, B_POINTER
+-14999, data_start, A_POINTER
+-19999, data_start, B_POINTER
 
 
 0, A_POINTER, READ_A_1
@@ -21,14 +20,14 @@ B_changed:
 0, B_POINTER:0 , B
 
 B, A, temp, L_B_A
-buf1_offset2, bp1, W1
+buf2_offset2, bp2, W1
 0, A, W1:0
--1, buf1_offset2, buf1_offset2, A_changed_fin
+-1, buf2_offset2, buf2_offset2, A_changed_fin
 
 L_B_A:
-buf1_offset2, bp1, W2
+buf2_offset2, bp2, W2
 0, B, W2:0
--1, buf1_offset2, buf1_offset2
+-1, buf2_offset2, buf2_offset2
 
 B_changed_fin:
 1, B_POINTER, B_POINTER
@@ -41,14 +40,14 @@ A_changed:
 0, A_POINTER:0 , A
 
 A, B, temp, L_A_B
-buf1_offset2, bp1, W3
+buf2_offset2, bp2, W3
 0, B, W3:0
--1, buf1_offset2, buf1_offset2, B_changed_fin
+-1, buf2_offset2, buf2_offset2, B_changed_fin
 
 L_A_B:
-buf1_offset2, bp1, W4
+buf2_offset2, bp2, W4
 0, A, W4:0
--1, buf1_offset2, buf1_offset2
+-1, buf2_offset2, buf2_offset2
 
 A_changed_fin:
 1, A_POINTER, A_POINTER

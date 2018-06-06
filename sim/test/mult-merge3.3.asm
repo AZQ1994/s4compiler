@@ -2,16 +2,14 @@
 // core 2: CD
 // core 3: ABCD
 // core 4: WRITE
--20000:-20000
--15000:-15000
--5000: -5000
--10000:-10000
+-19999:-19999
+-14999:-14999
 
 bp2: &buf2_start
 C: -5000
 
--15000, data_start, A_POINTER
--20000, data_start, B_POINTER
+-14999, data_start, A_POINTER
+-19999, data_start, B_POINTER
 
 
 0, A_POINTER, READ_A_1

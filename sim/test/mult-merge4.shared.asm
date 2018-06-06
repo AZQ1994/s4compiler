@@ -3,11 +3,15 @@ data_each: 5000
 data_start: &data
 data_finish: &data_last
 
+B_12:0
+
+
 buf1_offset:0
 buf2_offset:0
 buf1_offset2:-9999
 buf2_offset2:-9999
-write_offset: 0
+write_offset1: 0
+write_offset2: 0
 
 data: 4
 6
