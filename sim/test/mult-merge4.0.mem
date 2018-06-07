@@ -10,11 +10,11 @@
 5	#A_POINTER	@9	
 5	#A_POINTER	@10	
 12	#NEXT	@11	
-56	#0	@12	
+56	#0	@12	COMP:	
 4094	#SHARED_OUT	@13	
 4094	#SHARED_OUT	@14	
 16	#NEXT	@15	
-4094	#SHARED_OUT	@16	COMP:	
+4094	#SHARED_OUT	@16	
 4100	#B_12	@17	
 53	#temp	@18	
 28	#L_B_less	@19	
@@ -45,7 +45,7 @@
 55	#1	@44	skip1:	
 4105	#write_offset1	@45	
 4105	#write_offset1	@46	
-16	#COMP	@47	
+12	#COMP	@47	
 -5000	#-5000	@48	-5000:	
 -10000	#-10000	@49	-10000:	
 4107	#data	@50	buf1:	

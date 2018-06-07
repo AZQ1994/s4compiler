@@ -20,9 +20,10 @@ NEW_A:
 0 ,A_POINTER: 0, SHARED_OUT
 -1, A_POINTER, A_POINTER
 
+COMP:
 // wait B
 0, SHARED_OUT, SHARED_OUT
-COMP:
+
 SHARED_OUT, B_12, temp, L_B_less
 L_A_less:
 // new A

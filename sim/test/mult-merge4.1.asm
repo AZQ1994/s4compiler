@@ -12,14 +12,16 @@ temp : 0
 1: 1
 0: 0
 
--10000, buf1, B_POINTER
+B: 0
+
+-5000, buf1, B_POINTER
 
 NEW_B:
-0 ,B_POINTER: 0, B_12
+0 ,B_POINTER: 0, x
 -1, B_POINTER, B_POINTER
 
 COMP:
-SHARED_IN, B_12, temp, L_B_less
+SHARED_IN, B, temp, L_B_less
 L_A_less:
 // WRITE A
 write_offset1, bp1, W01
@@ -30,6 +32,7 @@ write_offset1, bp1, W01
 skip1: 1, write_offset1, write_offset1, COMP
 
 L_B_less:
+0, B, B_12
 // new B
 
 // count
