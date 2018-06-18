@@ -431,7 +431,7 @@ function parse_text(){
                     //
                     console.log('not ready');
                 }else */
-                if(split0[i][0]!='@'&&spli0t[i]!='NEXT'&&split0[i]!='HALT'){
+                if(split0[i][0]!='@'&&split0[i]!='NEXT'&&split0[i]!='HALT'){
                     split[i] = domain.concat([splitter+split0[i]]).join("%");
                 }else{
                     split[i] = split0[i];
