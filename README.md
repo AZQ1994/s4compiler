@@ -1,4 +1,4 @@
-# SIM/
+# Subneg4 compiler/
 
 ## Overview
 ### folders
