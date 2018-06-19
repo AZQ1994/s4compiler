@@ -14,6 +14,10 @@ Compile the LLVM_IR_to_XML tool first
 Then use the LLVM_IR_to_XML tool to convert llvm ir bitcode file to xml file.
 You can use helper.py in __test/__ to do this
 2. set the xml file in main.py
+3. Run python main.py
+```
+$ python main.py
+```
 
 ## Notes
 1. Still in progress, so not much instructions are supported
