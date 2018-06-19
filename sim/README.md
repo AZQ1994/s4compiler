@@ -57,3 +57,42 @@ else: goto next
 NEXTの場合は、オペランド４は省略できます。
 
 また、コメントはC形式で、"//"と"/*"+"*/"です。
+
+
+
+## Sample code
+
+Subtraction: c = a - b
+```
+// data mem
+a:10
+b:5
+c:0
+// prog mem
+b, a, c(, NEXT)
+```
+Addition: c = a + b
+```
+// data mem
+a:10
+b:5
+temp:0
+c:0
+0:0
+// prog mem
+a, 0, temp(, NEXT)
+temp, b, c(, NEXT)
+```
+Loop: for ( i=-5; i<0; i++) { sum -= i }
+```
+// data mem
+sum: 0
+i: -5
+-1: -1
+
+//prog mem
+L0: i, sum, sum(, NEXT) // sum += i
+    -1, i, i, L0 // i = i + 1 , if i < 0 goto L0
+
+```
+
