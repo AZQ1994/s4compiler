@@ -38,6 +38,9 @@ $ sim/assembler.py test/test_code_your_code/your.subneg4
 ```
 $ sim/simulator.py test/test_code_your_code/your.subneg4.mem
 ```
+
+_OR you can use the JavaScript tool for assembler and simulator in __x/__ folder_
+
 ## Notes
 1. Still in progress, so not much instructions are supported
 2. 
