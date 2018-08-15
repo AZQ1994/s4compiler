@@ -38,6 +38,7 @@ write_offset1, bp1, W01
 0, B_12, W01: 0
 // count
 -1, C, C, skip1
+
 0, -1, temp, HALT
 skip1: 1, write_offset1, write_offset1, COMP
 

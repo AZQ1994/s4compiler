@@ -1,7 +1,4 @@
-// core 1: AB
-// core 2: CD
-// core 3: ABCD
-// core 4: WRITE
+// merge from two side
 
 -5000: -5000
 bp1: &buf1_start

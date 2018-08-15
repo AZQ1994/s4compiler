@@ -29,7 +29,8 @@ p6 = re.compile("\s+")
 
 p7 = re.compile("\#\{\s*?(\d*)\s*?,\s*?(\S*)\s*?,\s*?(\d*)\s*?\}\#")
 
-
+p8 = re.compile("\%\{\s*\[\s*(\S.*?)\s*\]\s*")
+p9 = re.compile("\}\%")
 f = open(argvs[1]+".shared.asm","r")
 lines = re.sub(p1 ,"" ,f.read()).split("\n") # remove all occurance streamed comments (/*COMMENT */) from string
 f.close()
@@ -42,6 +43,8 @@ shared_prog_mem = []
 shared_data_mem = []
 shared_block_mem = []
 
+namespace = []
+
 connect = ""
 for l in lines:
 	m = re.match(p7, l)
@@ -49,6 +52,15 @@ for l in lines:
 		#print m.groups()
 		shared_block_mem.append(m.groups())
 		continue
+
+	m = re.match(p8, l)
+	if m != None:
+		namespace.append(m.group(1))
+		l = re.sub(p8 ,"" ,l)
+	m = re.match(p9, l)
+	if m != None:
+		namespace.pop()
+		l = re.sub(p9 ,"" ,l)
 
 	if connect != "":
 		l = connect + l
@@ -72,13 +84,14 @@ for l in lines:
 		s = re.split(p5,items[0])
 		index = len(shared_data_mem)
 		if s[-1][0] == "&":
-			shared_data_mem.append(["ptr",s[-1][1:],s[:-1]])
+			shared_data_mem.append(["ptr","%".join(namespace+[s[-1][1:]]),["%".join(namespace+[x]) for x in s[:-1]]])
 		else:
-			shared_data_mem.append(["data",int(s[-1]),s[:-1]])
+			shared_data_mem.append(["data",int(s[-1]),["%".join(namespace+[x]) for x in s[:-1]]])
 		for label in s[:-1]:
-			if label in shared_mem_dict:
-				print "[Warning] Label stated before", '"',label,'"'
-			shared_mem_dict[label] = ["shared",index]
+			name = "%".join(namespace+[label])
+			if name in shared_mem_dict:
+				print "[Warning] Label stated before", '"',name,'"'
+			shared_mem_dict[name] = ["shared",index]
 	else:
 		print "[Warning] Shared mem error line!"
 		print l
@@ -102,6 +115,8 @@ for i in range(cores):
 	data_mem.append([])
 	block_mem.append([])
 
+	namespace = []
+
 	f = open(argvs[1]+"."+str(i)+".asm","r")
 	lines = re.sub(p1 ,"" ,f.read()).split("\n")
 	f.close()
@@ -113,6 +128,15 @@ for i in range(cores):
 			#print m.groups()
 			block_mem[i].append(m.groups())
 			continue
+
+		m = re.match(p8, l)
+		if m != None:
+			namespace.append(m.group(1))
+			l = re.sub(p8 ,"" ,l)
+		m = re.match(p9, l)
+		if m != None:
+			namespace.pop()
+			l = re.sub(p9 ,"" ,l)
 
 		if connect != "":
 			l = connect + l
@@ -139,13 +163,14 @@ for i in range(cores):
 			s = re.split(p5,items[0])
 			index = len(data_mem[i])
 			if s[-1][0] == "&":
-				data_mem[i].append(["ptr",s[-1][1:],s[:-1]])
+				data_mem[i].append(["ptr","%".join(namespace+[s[-1][1:]]),["%".join(namespace+[x]) for x in s[:-1]]])
 			else:
-				data_mem[i].append(["data",int(s[-1]),s[:-1]])
+				data_mem[i].append(["data",int(s[-1]),["%".join(namespace+[x]) for x in s[:-1]]])
 			for label in s[:-1]:
-				if label in mem_dict[i]:
-					print "[Warning] Label stated before", '"',label,'"'
-				mem_dict[i][label] = ["data",index]
+				name = "%".join(namespace+[label])
+				if name in mem_dict[i]:
+					print "[Warning] Label stated before", '"',name,'"'
+				mem_dict[i][name] = ["data",index]
 			continue
 
 		if len(items) != 4:
@@ -157,12 +182,15 @@ for i in range(cores):
 			index = len(prog_mem[i])
 			if s[-1][0] == "@":
 				prog_mem[i].append(["data",int(s[-1][1:]),s[:-1]])
+			elif s[-1] in ["NEXT","HALT","SHARED_IN","SHARED_OUT"]:
+				prog_mem[i].append(["ptr",s[-1],["%".join(namespace+[x]) for x in s[:-1]]])
 			else:
-				prog_mem[i].append(["ptr",s[-1],s[:-1]])
+				prog_mem[i].append(["ptr","%".join(namespace+[s[-1]]),["%".join(namespace+[x]) for x in s[:-1]]])
 			for label in s[:-1]:
-				if label in mem_dict[i]:
-					print "ERROR !! label used", '"',label,'"'
-				mem_dict[i][label] = ["prog",index]
+				name = "%".join(namespace+[label])
+				if name in mem_dict[i]:
+					print "ERROR !! label used", '"',name,'"'
+				mem_dict[i][name] = ["prog",index]
 
 
 
@@ -194,9 +222,20 @@ for item in shared_data_mem:
 		if item[1] == "HALT":
 			mem_shared.append([-1,[],"HALT"])
 			continue
+		
 		if item[1] not in shared_mem_dict:
-			print "[warning]",item[1],"is not in memory"
-			shared_mem_dict[item[1]] = ["prog",0]
+			split = item[1].split("%")
+
+			for i in range(2,len(split)+1):
+				name = "%".join(split[:-i]+[split[-1]])
+
+				if name in shared_mem_dict:
+					item[1] = name
+					break
+			if item[1] not in shared_mem_dict:
+				print "[warning]",item[1],"is not in memory"
+				shared_mem_dict[item[1]] = ["prog",0]
+
 		d = shared_mem_dict[item[1]]
 		if d[0] == 'block':
 			mem_shared.append([d[1]+len(shared_data_mem)+shared_start,item[2],item[1]])
@@ -233,6 +272,7 @@ for i in range(cores):
 	for item in block_mem[i]:
 		mem_dict[i][item[1]] = ["block", c]
 		c += int(item[0])
+
 	for item in prog_mem[i] + data_mem[i]:
 		if item[0] == "data":
 			mem[i].append([item[1],item[2],item[1]])
@@ -249,9 +289,18 @@ for i in range(cores):
 			if item[1] == "SHARED_OUT":
 				mem[i].append([shared_out_addr, item[2], item[1]])
 				continue
+
 			if item[1] not in mem_dict[i]:
-				print "[warning]",item[1],"is not in memory"
-				mem_dict[i][item[1]] = ["prog",0]
+				split = item[1].split("%")
+				for j in range(2,len(split)+1):
+					name = "%".join(split[:-j]+[split[-1]])
+					if name in mem_dict[i]:
+						item[1] = name
+						break
+				if item[1] not in mem_dict[i]:
+					print "[warning]",item[1],"is not in memory"
+					mem_dict[i][item[1]] = ["prog",0]
+
 			d = mem_dict[i][item[1]]
 			if d[0] == "prog":
 				mem[i].append([d[1],item[2],item[1]])
@@ -298,96 +347,112 @@ res = [0]*cores
 stage=[1]*cores
 cycle = 0
 stall = [0]*cores
-while True:
-	cycle += 1
-	#stage1
-	core = i%4
-	if pc[core] < 0:
-		stage[core] = 0
-	if stage[core] != 1:
-		stall[core] += 1
-	while stage[core]==1:
-		a[core] = mem[core][pc[core]][0]
-		b[core] = mem[core][pc[core]+1][0]
-		if a[core] == shared_in_addr or b[core] == shared_in_addr:
-			if flags[core]:
-				flags[core]=False
-			else:
-				# again
-				stall[core] += 1
-				break
-		stage[core]=2
-		break
 
-	#stage2
-	core = (i-1)%4
-	if stage[core] != 2:
-		stall[core] += 1
-	if stage[core]==2:
-		if a[core] < shared_start:
-			mem_a[core] = mem[core][a[core]][0]
-		else:
-			mem_a[core] = mem_shared[a[core] - shared_start][0]
-
-		if b[core] < shared_start:
-			mem_b[core] = mem[core][b[core]][0]
-		else:
-			mem_b[core] = mem_shared[b[core] - shared_start][0]
-		stage[core] = 3
-
-	#stage3
-	core = (i-2)%4
-	if stage[core] != 3:
-		stall[core] += 1
-	while stage[core]==3:
-		res[core] = (mem_b[core] - mem_a[core])&0xffffffff
-		if res[core] > 0x7fffffff:
-			res[core] = res[core] - 0x100000000
-
-		c[core] = mem[core][pc[core]+2][0]
-		d[core] = mem[core][pc[core]+3][0]
-
-		if c[core] == shared_out_addr:
-			if not flags[(core+1)%cores]:
-				flags[(core+1)%cores] = True
-				mem[(core+1)%cores][shared_in_addr][0] = res[core]
-			else:
-				stage[core] = 3
-				stall[core] += 1
-				break
-		
-
-		stage[core] = 4
-		break
-	#stage4
-	core = (i-3)%4
-	if stage[core] != 4:
-		stall[core] += 1
-	if stage[core]==4:
-		
-		if c[core] < shared_start:
-			mem[core][c[core]][0] = res[core]
-		else:
-			mem_shared[c[core] - shared_start][0] = res[core]
-		
-
-		if res[core] < 0:
-			pc[core] = d[core]
-		else:
-			pc[core] += 4
-
+shared_count = 0
+shared_count_read = 0
+shared_count_write = 0
+try:
+	while True:
+		cycle += 1
+		#stage1
+		core = i%4
 		if pc[core] < 0:
 			stage[core] = 0
-		else:
-			stage[core] = 1
-	i += 1
-	#print i, a,b,c,d,pc,flags,stage
-	if max(pc) < 0:
-		break
-	if max(stage) == 0:
-		print "stage break"
-		break
-print i
-print stall
-for k,x in enumerate(mem_shared):
-	print k,":",x[0]
+		if stage[core] != 1:
+			stall[core] += 1
+		while stage[core]==1:
+			a[core] = mem[core][pc[core]][0]
+			b[core] = mem[core][pc[core]+1][0]
+			if a[core] == shared_in_addr or b[core] == shared_in_addr:
+				if flags[core]:
+					flags[core]=False
+				else:
+					# again
+					stall[core] += 1
+					break
+			stage[core]=2
+			break
+
+		#stage2
+		core = (i-1)%4
+		if stage[core] != 2:
+			stall[core] += 1
+		if stage[core]==2:
+			count = 0
+			if a[core] < shared_start:
+				mem_a[core] = mem[core][a[core]][0]
+			else:
+				mem_a[core] = mem_shared[a[core] - shared_start][0]
+				count += 1
+
+			if b[core] < shared_start:
+				mem_b[core] = mem[core][b[core]][0]
+			else:
+				mem_b[core] = mem_shared[b[core] - shared_start][0]
+				count += 1
+			if count > 1:
+				print "WARNING: more than one access to shared memory"
+			stage[core] = 3
+			shared_count += count
+			shared_count_read += count
+		#stage3
+		core = (i-2)%4
+		if stage[core] != 3:
+			stall[core] += 1
+		while stage[core]==3:
+			res[core] = (mem_b[core] - mem_a[core])&0xffffffff
+			if res[core] > 0x7fffffff:
+				res[core] = res[core] - 0x100000000
+
+			c[core] = mem[core][pc[core]+2][0]
+			d[core] = mem[core][pc[core]+3][0]
+
+			if c[core] == shared_out_addr:
+				if not flags[(core+1)%cores]:
+					flags[(core+1)%cores] = True
+					mem[(core+1)%cores][shared_in_addr][0] = res[core]
+				else:
+					stage[core] = 3
+					stall[core] += 1
+					break
+			stage[core] = 4
+			break
+		#stage4
+		core = (i-3)%4
+		if stage[core] != 4:
+			stall[core] += 1
+		if stage[core]==4:
+			
+			if c[core] < shared_start:
+				mem[core][c[core]][0] = res[core]
+			else:
+				mem_shared[c[core] - shared_start][0] = res[core]
+				shared_count += 1
+				shared_count_write += 1
+
+			if res[core] < 0:
+				pc[core] = d[core]
+			else:
+				pc[core] += 4
+
+			if pc[core] < 0:
+				stage[core] = 0
+			else:
+				stage[core] = 1
+		i += 1
+		#print i, a[1],b[1],c[1],mem_a[1],mem_b[1],res[1],pc,flags,stage[1]
+		#if i == 130000: break
+		if max(pc) < 0:
+			break
+		if max(stage) == 0:
+			print "stage break"
+			break
+except KeyboardInterrupt:
+	print pc, i
+finally:
+	print i
+	print stall
+	print "Access on shared", shared_count
+	print "shared_write:", shared_count_write, "shared_read:", shared_count_read
+	for k,x in enumerate(mem_shared):
+		print k,":",x[0]

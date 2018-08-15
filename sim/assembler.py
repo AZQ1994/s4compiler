@@ -24,6 +24,9 @@ p6 = re.compile("\s+")
 
 p7 = re.compile("\#\{\s*?(\d*)\s*?,\s*?(\S*)\s*?,\s*?(\d*)\s*?\}\#")
 
+p8 = re.compile("\%\{\s*\[\s*(\S.*?)\s*\]\s*")
+p9 = re.compile("\}\%")
+
 f = open(argvs[1],"r")
 lines = re.sub(p1 ,"" ,f.read()).split("\n")
 f.close()
@@ -36,6 +39,7 @@ prog_mem = []
 data_mem = []
 block_mem = []
 
+namespace = []
 
 connect = ""
 for l in lines:
@@ -44,6 +48,15 @@ for l in lines:
 		#print m.groups()
 		block_mem.append(m.groups())
 		continue
+
+	m = re.match(p8, l)
+	if m != None:
+		namespace.append(m.group(1))
+		l = re.sub(p8 ,"" ,l)
+	m = re.match(p9, l)
+	if m != None:
+		namespace.pop()
+		l = re.sub(p9 ,"" ,l)
 
 	if connect != "":
 		l = connect + l
@@ -70,13 +83,14 @@ for l in lines:
 		s = re.split(p5,items[0])
 		index = len(data_mem)
 		if s[-1][0] == "&":
-			data_mem.append(["ptr",s[-1][1:],s[:-1]])
+			data_mem.append(["ptr","%".join(namespace+[s[-1][1:]]),["%".join(namespace+[x]) for x in s[:-1]]])
 		else:
-			data_mem.append(["data",int(s[-1]),s[:-1]])
+			data_mem.append(["data",int(s[-1]),["%".join(namespace+[x]) for x in s[:-1]]])
 		for label in s[:-1]:
-			if label in mem_dict:
-				print "ERROR !! label used", '"',label,'"'
-			mem_dict[label] = ["data",index]
+			name = "%".join(namespace+[label])
+			if name in mem_dict:
+				print "ERROR !! label used", '"',name,'"'
+			mem_dict[name] = ["data",index]
 		continue
 
 	if len(items) != 4:
@@ -87,19 +101,22 @@ for l in lines:
 		s = re.split(p5,items[i])
 		index = len(prog_mem)
 		if s[-1][0] == "@":
-			prog_mem.append(["data",int(s[-1][1:]),s[:-1]])
+			prog_mem.append(["data",int(s[-1][1:]),["%".join(namespace+[x]) for x in s[:-1]]])
+		elif s[-1] in ["NEXT","HALT"]:
+			prog_mem.append(["ptr",s[-1],["%".join(namespace+[x]) for x in s[:-1]]])	
 		else:
-			prog_mem.append(["ptr",s[-1],s[:-1]])
+			prog_mem.append(["ptr","%".join(namespace+[s[-1]]),["%".join(namespace+[x]) for x in s[:-1]]])
 		for label in s[:-1]:
-			if label in mem_dict:
-				print "ERROR !! label used", '"',label,'"'
-			mem_dict[label] = ["prog",index]
+			name = "%".join(namespace+[label])
+			if name in mem_dict:
+				print "ERROR !! label used", '"',name,'"'
+			mem_dict[name] = ["prog",index]
 
 
 
 	#print items
 
-#print prog_mem, data_mem
+print prog_mem, data_mem
 file = open(argvs[1]+".mem","w")
 
 mem = []
@@ -121,9 +138,19 @@ for item in prog_mem + data_mem:
 			mem.append([-1,[],"HALT"])
 			continue
 		#print item
+		
 		if item[1] not in mem_dict:
-			print "[warning]",item[1],"is not in memory"
-			mem_dict[item[1]] = ["prog",0]
+			split = item[1].split("%")
+
+			for i in range(1,len(split)):
+				name = "%".join(split[:-i]+[split[-1]])
+
+				if name in mem_dict:
+					item[1] = name
+					break
+			if item[1] not in mem_dict:
+				print "[warning]",item[1],"is not in memory"
+				mem_dict[item[1]] = ["prog",0]
 		d = mem_dict[item[1]]
 		if d[0] == "prog":
 			mem.append([d[1],item[2],item[1]])

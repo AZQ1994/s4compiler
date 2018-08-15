@@ -45,6 +45,9 @@ res = [0]*cores
 stage=[1]*cores
 cycle = 0
 stall = [0]*cores
+
+mem_count = [0]*cores
+
 try:
 	while True:
 		cycle += 1
@@ -67,6 +70,7 @@ try:
 							break
 					stage[core]=2
 					break
+				mem_count[core] += 2
 				continue
 			#stage2
 			if stage[core] == 2:
@@ -81,6 +85,12 @@ try:
 					else:
 						mem_b[core] = mem_shared[b[core] - shared_start]
 					stage[core] = 3
+				if a[core] == shared_in_addr :
+					mem_count[core] += 1
+				elif b[core] == shared_in_addr :
+					mem_count[core] += 1
+				else:
+					mem_count[core] += 2
 				continue
 			#stage3
 			if stage[core] == 3:
@@ -106,6 +116,7 @@ try:
 
 					stage[core] = 4
 					break
+				mem_count[core] += 2
 				continue
 			#stage4
 			if stage[core] == 4:
@@ -130,6 +141,10 @@ try:
 					else:
 						stage[core] = 1
 				i += 1
+				if c[core] == shared_out_addr :
+					pass
+				else:
+					mem_count[core] += 1
 				continue
 			
 
@@ -146,6 +161,7 @@ except KeyboardInterrupt :
 finally:
 	print i
 	print stall
+	print "mem_access:",mem_count
 	for k,x in enumerate(mem_shared):
 		print k,":",x
 	#for k,x in enumerate(mem[3]):
