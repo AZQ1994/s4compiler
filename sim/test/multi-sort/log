@@ -1,5 +1,5 @@
-['../../multi-assembler.py', 'sort', '-e']
-../../multi-assembler.py . 
+['.././../multi-assembler.py', 'sort', '-e']
+.././../multi-assembler.py . 
 4095 4094
 4095 4094
 4095 4094
