@@ -143,10 +143,10 @@ marge2:
 	//sng4 DEC,SIZE,loop_count 
 // SIZE,Z,loop_count	
 	
- Z,RESULT_REF,result_address0 
- Z,RESULT_REF,result_address1 
- Z,INPUT_REF,input_address0	 
- Z,INPUT_REF,input_address1  
+ Z,RESULT2_REF,result_address0 
+ Z,RESULT2_REF,result_address1 
+ Z,RESULT_REF,input_address0	 
+ Z,RESULT_REF,input_address1  
 
 	//sng4 DEC,HALF_SIZE,input_count 
 	//sng4 DEC,HALF_SIZE,marge_count 

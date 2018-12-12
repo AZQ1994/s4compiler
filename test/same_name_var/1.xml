@@ -1,0 +1,23 @@
+<Module>
+  <!-- ; ModuleID = '1.bc' -->
+  <!-- source_filename = " 1.c  "-->
+  <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
+  <!-- target triple = "ppc32" -->
+  <Globals>
+    <Variable name="data" Vtype="global" type="i32" init="5" align="4" />
+    <Variable name="temp" Vtype="global" type="i32" init="3" align="4" />
+  </Globals>
+
+  <!-- Function Attrs: norecurse nounwind readonly -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="temp" />
+        <Instruction des="sub" opName="add" type="i32" operands="r-0,-10" />
+        <Instruction opName="ret" operands="[i32]sub" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

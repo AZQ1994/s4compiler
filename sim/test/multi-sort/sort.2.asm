@@ -265,5 +265,5 @@ B:0
 1: 1
 temp: 0
 }%
-#{1000, stack_start2, 0}#
-#{1000, stack_start, 0}#
+#{100, stack_start2, 0}#
+#{100, stack_start, 0}#

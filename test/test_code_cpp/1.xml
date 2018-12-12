@@ -1,0 +1,49 @@
+<Module>
+  <!-- ; ModuleID = '1.bc' -->
+  <!-- source_filename = " 1.cpp  "-->
+  <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
+  <!-- target triple = "ppc32" -->
+
+class.Rectangle = type { i32, i32 }
+  <Globals>
+    <Variable name="res" Vtype="global" type="i32" init="0" align="4" />
+    <Variable name="input1" Vtype="global" type="i32" init="3" align="4" />
+    <Variable name="input2" Vtype="global" type="i32" init="4" align="4" />
+  </Globals>
+
+  <!-- Function Attrs: norecurse nounwind -->
+  <Function linkage="" mode="define" returnType="void" name="_ZN9Rectangle10set_valuesEii">
+    <Arguments number="3">
+      <Arg type="class.Rectangle*"  nocapturename="this"/>
+      <Arg type="i32" name="x"/>
+      <Arg type="i32" name="y"/>
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="width" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this,[i32]0,[i32]0" />
+        <Instruction opName="store" operands="[i32]x,[i32*]width" />
+        <Instruction des="height" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this,[i32]0,[i32]1" />
+        <Instruction opName="store" operands="[i32]y,[i32*]height" />
+        <Instruction opName="ret" returnType="void" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+  <!-- Function Attrs: norecurse nounwind -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="input1" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="input2" />
+        <Instruction des="cmp.i" opName="icmp_sgt" type="i32" operands="r-0,0" />
+        <Instruction des="mul.i" opName="mul" type="i32" operands="r-1,r-0" />
+        <Instruction des="sub.i" opName="sub" type="i32" operands="r-0,r-1" />
+        <Instruction des="retval.0.i" opName="select" operands="[i1]cmp.i,[i32]mul.i,[i32]sub.i" />
+        <Instruction opName="store" operands="[i32]retval.0.i,[i32*]res" />
+        <Instruction opName="ret" operands="[i32]retval.0.i" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

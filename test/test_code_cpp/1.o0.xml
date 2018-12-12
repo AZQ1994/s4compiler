@@ -1,0 +1,103 @@
+<Module>
+  <!-- ; ModuleID = '1.o0.bc' -->
+  <!-- source_filename = " 1.cpp  "-->
+  <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
+  <!-- target triple = "ppc32" -->
+
+class.Rectangle = type { i32, i32 }
+
+$_ZN9Rectangle4areaEv = comdat any
+  <Globals>
+    <Variable name="res" Vtype="global" type="i32" init="0" align="4" />
+    <Variable name="input1" Vtype="global" type="i32" init="3" align="4" />
+    <Variable name="input2" Vtype="global" type="i32" init="4" align="4" />
+  </Globals>
+
+  <!-- Function Attrs: noinline nounwind -->
+  <Function linkage="" mode="define" returnType="void" name="_ZN9Rectangle10set_valuesEii">
+    <Arguments number="3">
+      <Arg type="class.Rectangle*" name="this"/>
+      <Arg type="i32" name="x"/>
+      <Arg type="i32" name="y"/>
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="this.addr" opName="alloca"  allocaType="class.Rectangle*" align="4" />
+        <Instruction des="x.addr" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="y.addr" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction opName="store" operands="[class.Rectangle*]this,[class.Rectangle**]this.addr" />
+        <Instruction opName="store" operands="[i32]x,[i32*]x.addr" />
+        <Instruction opName="store" operands="[i32]y,[i32*]y.addr" />
+        <Instruction des="this1" opName="load" loadType="class.Rectangle*" type="class.Rectangle**" operands="this.addr" />
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="x.addr" />
+        <Instruction des="width" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this1,[i32]0,[i32]0" />
+        <Instruction opName="store" operands="[i32]r-0,[i32*]width" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="y.addr" />
+        <Instruction des="height" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this1,[i32]0,[i32]1" />
+        <Instruction opName="store" operands="[i32]r-1,[i32*]height" />
+        <Instruction opName="ret" returnType="void" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+  <!-- Function Attrs: noinline norecurse -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="retval" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="rect" opName="alloca"  allocaType="class.Rectangle" align="4" />
+        <Instruction opName="store" operands="[i32]0,[i32*]retval" />
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="input1" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="input2" />
+        <Instruction opName="call" functionType="void" operands="_ZN9Rectangle10set_valuesEii, [class.Rectangle*]rect, [i32]r-0, [i32]r-1" />
+        <Instruction des="call" opName="call" functionType="i32" operands="_ZN9Rectangle4areaEv, [class.Rectangle*]rect" />
+        <Instruction opName="store" operands="[i32]call,[i32*]res" />
+        <Instruction des="r-2" opName="load" loadType="i32" type="i32*" operands="res" />
+        <Instruction opName="ret" operands="[i32]r-2" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+
+  <!-- Function Attrs: noinline nounwind -->
+  <Function linkage="linkonce_odr " mode="define" linkonce_odr returnType="i32" name="_ZN9Rectangle4areaEv">
+    <Arguments number="1">
+      <Arg type="class.Rectangle*" name="this"/>
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="retval" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="this.addr" opName="alloca"  allocaType="class.Rectangle*" align="4" />
+        <Instruction opName="store" operands="[class.Rectangle*]this,[class.Rectangle**]this.addr" />
+        <Instruction des="this1" opName="load" loadType="class.Rectangle*" type="class.Rectangle**" operands="this.addr" />
+        <Instruction des="width" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this1,[i32]0,[i32]0" />
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="width" />
+        <Instruction des="cmp" opName="icmp_sgt" type="i32" operands="r-0,0" />
+        <Instruction opName="br" operands="[i1]cmp, [label]if.then, [label]if.else" />
+      </BasicBlock>
+      <BasicBlock name="if.then">
+        <Instruction des="width2" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this1,[i32]0,[i32]0" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="width2" />
+        <Instruction des="height" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this1,[i32]0,[i32]1" />
+        <Instruction des="r-2" opName="load" loadType="i32" type="i32*" operands="height" />
+        <Instruction des="mul" opName="mul" type="i32" operands="r-1,r-2" />
+        <Instruction opName="store" operands="[i32]mul,[i32*]retval" />
+        <Instruction opName="br" type="label" operands="return" />
+      </BasicBlock>
+      <BasicBlock name="if.else">
+        <Instruction des="width3" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this1,[i32]0,[i32]0" />
+        <Instruction des="r-3" opName="load" loadType="i32" type="i32*" operands="width3" />
+        <Instruction des="height4" opName="getelementptr" type="class.Rectangle" operands="[class.Rectangle*]this1,[i32]0,[i32]1" />
+        <Instruction des="r-4" opName="load" loadType="i32" type="i32*" operands="height4" />
+        <Instruction des="sub" opName="sub" type="i32" operands="r-3,r-4" />
+        <Instruction opName="store" operands="[i32]sub,[i32*]retval" />
+        <Instruction opName="br" type="label" operands="return" />
+      </BasicBlock>
+      <BasicBlock name="return">
+        <Instruction des="r-5" opName="load" loadType="i32" type="i32*" operands="retval" />
+        <Instruction opName="ret" operands="[i32]r-5" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

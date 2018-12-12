@@ -162,7 +162,7 @@ finally:
 	print i
 	print stall
 	print "mem_access:",mem_count
-	for k,x in enumerate(mem_shared):
+	for k,x in enumerate(mem[3]):#mem_shared):
 		print k,":",x
 	#for k,x in enumerate(mem[3]):
 	#	print k,":",x

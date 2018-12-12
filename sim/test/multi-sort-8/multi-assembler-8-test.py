@@ -443,6 +443,15 @@ try:
 			while stage[cluster][core]==1:
 				a[cluster][core] = mem[cluster][core][pc[cluster][core]][0]
 				b[cluster][core] = mem[cluster][core][pc[cluster][core]+1][0]
+				
+				stage[cluster][core]=2
+				break
+
+			#stage2
+			core = (i-1)%4
+			if stage[cluster][core] != 2:
+				stall[cluster][core] += 1
+			while stage[cluster][core]==2:
 				if a[cluster][core] == shared_in_addr or b[cluster][core] == shared_in_addr:
 					if flags[cluster][core]:
 						core_flag = True
@@ -473,14 +482,7 @@ try:
 				if c_r_flag:
 					#print "c_r", mem[cluster][core][cluster_shared_left_in_addr][0]
 					flags_c[cluster][1]=False
-				stage[cluster][core]=2
-				break
 
-			#stage2
-			core = (i-1)%4
-			if stage[cluster][core] != 2:
-				stall[cluster][core] += 1
-			if stage[cluster][core]==2:
 				count = 0
 				if a[cluster][core] < shared_start:
 					mem_a[cluster][core] = mem[cluster][core][a[cluster][core]][0]

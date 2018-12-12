@@ -1,0 +1,35 @@
+<Module>
+  <!-- ; ModuleID = '2.o0.bc' -->
+  <!-- source_filename = " 2.c  "-->
+  <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
+  <!-- target triple = "ppc32" -->
+  <Globals>
+    <Variable name="a" Vtype="global" type="i32" init="1" align="4" />
+    <Variable name="b" Vtype="global" type="i32" init="2" align="4" />
+    <Variable name="c" Vtype="global" type="i32" init="0" align="4" />
+  </Globals>
+
+  <!-- Function Attrs: noinline nounwind -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="retval" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="i" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction des="i1" opName="alloca"  allocaType="i32" align="4" />
+        <Instruction opName="store" operands="[i32]0,[i32*]retval" />
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="a" />
+        <Instruction opName="store" operands="[i32]r-0,[i32*]i" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="b" />
+        <Instruction opName="store" operands="[i32]r-1,[i32*]i1" />
+        <Instruction des="r-2" opName="load" loadType="i32" type="i32*" operands="i" />
+        <Instruction des="r-3" opName="load" loadType="i32" type="i32*" operands="a" />
+        <Instruction des="add" opName="add" type="i32" operands="r-2,r-3" />
+        <Instruction opName="store" operands="[i32]add,[i32*]c" />
+        <Instruction des="r-4" opName="load" loadType="i32" type="i32*" operands="i" />
+        <Instruction opName="ret" operands="[i32]r-4" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

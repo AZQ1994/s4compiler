@@ -1,0 +1,80 @@
+<Module>
+  <!-- ; ModuleID = 'lev-2dmat.bc' -->
+  <!-- source_filename = " lev-2dmat.c  "-->
+  <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
+  <!-- target triple = "ppc32" -->
+  <Globals>
+    <Variable name="data" Vtype="global" type="[129 x [129 x i32]]" init="zeroinitializer" align="4" />
+    <Variable name="main.str1" Vtype="constant" type="[128 x i8]" init="c"kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  kitten  "" align="1" />
+    <Variable name="main.str2" Vtype="constant" type="[128 x i8]" init="c"sitting sitting sitting sitting sitting sitting sitting sitting sitting sitting sitting sitting sitting sitting sitting sitting "" align="1" />
+  </Globals>
+
+  <!-- Function Attrs: norecurse nounwind -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction opName="br" type="label" operands="for.body" />
+      </BasicBlock>
+      <BasicBlock name="for.body">
+        <Instruction des="i.0150" opName="phi" type="i32" values="[0:entry],[inc:for.body]" />
+        <Instruction des="arrayidx1" opName="getelementptr" type="[129 x [129 x i32]]" operands="[[129 x [129 x i32]]*]data,[i32]0,[i32]i.0150,[i32]0" />
+        <Instruction opName="store" operands="[i32]i.0150,[i32*]arrayidx1" />
+        <Instruction des="arrayidx2" opName="getelementptr" type="[129 x [129 x i32]]" operands="[[129 x [129 x i32]]*]data,[i32]0,[i32]0,[i32]i.0150" />
+        <Instruction opName="store" operands="[i32]i.0150,[i32*]arrayidx2" />
+        <Instruction des="inc" opName="add" type="i32" operands="i.0150,1" />
+        <Instruction des="exitcond152" opName="icmp_eq" type="i32" operands="inc,129" />
+        <Instruction opName="br" operands="[i1]exitcond152, [label]for.cond6.preheader.preheader, [label]for.body" />
+      </BasicBlock>
+      <BasicBlock name="for.cond6.preheader.preheader">
+        <Instruction opName="br" type="label" operands="for.cond6.preheader" />
+      </BasicBlock>
+      <BasicBlock name="for.cond6.preheader">
+        <Instruction des="i.1149" opName="phi" type="i32" values="[inc105:for.inc104],[1:for.cond6.preheader.preheader]" />
+        <Instruction des="sub" opName="add" type="i32" operands="i.1149,-1" />
+        <Instruction des="arrayidx27" opName="getelementptr" type="[128 x i8]" operands="[[128 x i8]*]main.str2,[i32]0,[i32]sub" />
+        <Instruction des="r-0" opName="load" loadType="i8" type="i8*" operands="arrayidx27" />
+        <Instruction des="arrayidx13.phi.trans.insert" opName="getelementptr" type="[129 x [129 x i32]]" operands="[[129 x [129 x i32]]*]data,[i32]0,[i32]i.1149,[i32]0" />
+        <Instruction des=".pre" opName="load" loadType="i32" type="i32*" operands="arrayidx13.phi.trans.insert" />
+        <Instruction des="arrayidx23.phi.trans.insert" opName="getelementptr" type="[129 x [129 x i32]]" operands="[[129 x [129 x i32]]*]data,[i32]0,[i32]sub,[i32]0" />
+        <Instruction des=".pre153" opName="load" loadType="i32" type="i32*" operands="arrayidx23.phi.trans.insert" />
+        <Instruction opName="br" type="label" operands="for.body8" />
+      </BasicBlock>
+      <BasicBlock name="for.body8">
+        <Instruction des="r-1" opName="phi" type="i32" values="[.pre153:for.cond6.preheader],[r-3:for.body8]" />
+        <Instruction des="r-2" opName="phi" type="i32" values="[.pre:for.cond6.preheader],[cond98:for.body8]" />
+        <Instruction des="j.0148" opName="phi" type="i32" values="[1:for.cond6.preheader],[inc102:for.body8]" />
+        <Instruction des="arrayidx10" opName="getelementptr" type="[129 x [129 x i32]]" operands="[[129 x [129 x i32]]*]data,[i32]0,[i32]sub,[i32]j.0148" />
+        <Instruction des="r-3" opName="load" loadType="i32" type="i32*" operands="arrayidx10" />
+        <Instruction des="add" opName="add" type="i32" operands="r-3,1" />
+        <Instruction des="sub12" opName="add" type="i32" operands="j.0148,-1" />
+        <Instruction des="add14" opName="add" type="i32" operands="r-2,1" />
+        <Instruction des="cmp15" opName="icmp_slt" type="i32" operands="r-3,r-2" />
+        <Instruction des="arrayidx25" opName="getelementptr" type="[128 x i8]" operands="[[128 x i8]*]main.str1,[i32]0,[i32]sub12" />
+        <Instruction des="r-4" opName="load" loadType="i8" type="i8*" operands="arrayidx25" />
+        <Instruction des="not.cmp29" opName="icmp_ne" type="i8" operands="r-4,r-0" />
+        <Instruction des="cond" opName="zext" [i1]not.cmp29 to i32 />
+        <Instruction des="add31" opName="add" type="i32" operands="cond,r-1" />
+        <Instruction des="cmp32" opName="icmp_slt" type="i32" operands="add,add31" />
+        <Instruction des="add.add31" opName="select" operands="[i1]cmp32,[i32]add,[i32]add31" />
+        <Instruction des="cmp73" opName="icmp_slt" type="i32" operands="add14,add31" />
+        <Instruction des="add14.add31" opName="select" operands="[i1]cmp73,[i32]add14,[i32]add31" />
+        <Instruction des="cond98" opName="select" operands="[i1]cmp15,[i32]add.add31,[i32]add14.add31" />
+        <Instruction des="arrayidx100" opName="getelementptr" type="[129 x [129 x i32]]" operands="[[129 x [129 x i32]]*]data,[i32]0,[i32]i.1149,[i32]j.0148" />
+        <Instruction opName="store" operands="[i32]cond98,[i32*]arrayidx100" />
+        <Instruction des="inc102" opName="add" type="i32" operands="j.0148,1" />
+        <Instruction des="exitcond" opName="icmp_eq" type="i32" operands="inc102,129" />
+        <Instruction opName="br" operands="[i1]exitcond, [label]for.inc104, [label]for.body8" />
+      </BasicBlock>
+      <BasicBlock name="for.inc104">
+        <Instruction des="inc105" opName="add" type="i32" operands="i.1149,1" />
+        <Instruction des="exitcond151" opName="icmp_eq" type="i32" operands="inc105,129" />
+        <Instruction opName="br" operands="[i1]exitcond151, [label]for.end106, [label]for.cond6.preheader" />
+      </BasicBlock>
+      <BasicBlock name="for.end106">
+        <Instruction opName="ret" operands="[i32]0" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

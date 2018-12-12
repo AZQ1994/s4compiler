@@ -1,0 +1,25 @@
+<Module>
+  <!-- ; ModuleID = '2.bc' -->
+  <!-- source_filename = " 2.c  "-->
+  <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
+  <!-- target triple = "ppc32" -->
+  <Globals>
+    <Variable name="a" Vtype="global" type="i32" init="1" align="4" />
+    <Variable name="b" Vtype="global" type="i32" init="2" align="4" />
+    <Variable name="c" Vtype="global" type="i32" init="0" align="4" />
+  </Globals>
+
+  <!-- Function Attrs: norecurse nounwind -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="a" />
+        <Instruction des="add" opName="shl" type="i32" operands="r-0,1" />
+        <Instruction opName="store" operands="[i32]add,[i32*]c" />
+        <Instruction opName="ret" operands="[i32]r-0" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

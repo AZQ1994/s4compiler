@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # assembler for subneg4 ring arch with a mem at the center
 
-shared_start = 4096
+shared_start = 1024
 cores = 4
 shared_in_addr = shared_start-1
 shared_out_addr = shared_start-2
