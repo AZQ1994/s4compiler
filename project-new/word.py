@@ -150,3 +150,10 @@ class Address(Word):
 				return "(addr){0}".format(self.value)
 		else:
 			return "{0}: {1}".format(self.name, self.value)
+class DataAddress(Address):
+
+	def to_asm(self):
+		if isinstance(self.value, object):
+			return "{0}: &L_{1}".format(self.name, id(self.value)) ### TODO 20181127 # how to represent a label
+		else:
+			return "{0}: {1}".format(self.name, self.value)
