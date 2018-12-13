@@ -54,7 +54,7 @@ def trans_add(IN, WM):
 
 def trans_alloca(IN, WM):
 	IN.remove()
-	IN.params[0].
+	#IN.params[0].
 
 transform_dict = {
 	"add": trans_add,

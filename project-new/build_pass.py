@@ -38,12 +38,12 @@ class BuildPass(Pass):
 		result_of_main = WM.new_dataword("_ret", 0)
 		address_of_main = WM.new_address("", None) ### NEED TO FILL IN LATER
 		append_node = append_node.append(
-				IRInstructionNode([result_of_main.new_ptr(),[],address_of_main], "call", None),### TODO 20181128 IRCall
+				IRInstructionNode([result_of_main.new_ptr(),[],address_of_main], "main-call", None),### TODO 20181128 IRCall
 				P_GOTO(WM.get_HALT())
 			)
 
 		namespace.append("M_")
-		WM.namespace.add_namespace(namespace)
+		WM.add_namespace(namespace)
 
 		self.debug_log("Starting parsing xml tree...")
 		module = self.xmltree.getroot()
@@ -94,7 +94,7 @@ class BuildPass(Pass):
 				
 				### namespace push function name
 				namespace.append(function_name)
-				WM.namespace.add_namespace(namespace)
+				WM.add_namespace(namespace)
 
 				### prepare graph
 				# self.bb_graph[function_name] = Graph()
@@ -392,8 +392,8 @@ class BuildPass(Pass):
 							break;
 				
 
-				
-
+				namespace.pop()
+				# end of function
 		address_of_main.value = function_dict["main"]
 		#self.print_asm()
 		
