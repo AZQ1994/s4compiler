@@ -226,6 +226,22 @@ class P_SUB(PseudoInstructionNode):
 	def __repr__(self):
 		return "P_SUB {0[0]} {0[1]} {0[2]}".format(self.params)
 
+class P_CP(PseudoInstructionNode):
+	def __init__(self, p1, p2, comment = ""):
+		super(P_CP, self).__init__([p1, p2], "P_CP", comment)
+	def rep(self):
+		_WM = self.params[0].manager
+		_next = _WM.getNext()
+		c_0 = _WM.get_const_ptr(0)
+		rep = Subneg4InstructionNode(c_0, self.params[2], self.params[1], _next, self.comment)
+		self.replace_by(rep)
+
+
+	def __str__(self):
+		return "(PSD) {0} = {1}; // {2}".format(self.params[0], self.params[1], self.comment)
+	def __repr__(self):
+		return "P_CP {0[0]} {0[1]}".format(self.params)
+
 class P_ADD(PseudoInstructionNode):
 	def __init__(self, p1, p2, p3, comment = ""):
 		super(P_SUB, self).__init__([p1, p2, p3], "P_ADD", comment)
