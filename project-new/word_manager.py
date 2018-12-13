@@ -47,6 +47,11 @@ class WordManager(object):
 			namespace = self.currentNamespace
 		return self.namespace.add_word(Address(name, value, self), namespace)
 
+	def new_dataaddress(self, name, value, namespace = None):
+		if namespace == None:
+			namespace = self.currentNamespace
+		return self.namespace.add_word(DataAddress(name, value, self), namespace)
+
 	def reg(self, word):
 		# called on creating a word object
 		self.book[word] = word
