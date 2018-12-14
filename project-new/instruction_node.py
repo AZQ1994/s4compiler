@@ -5,6 +5,7 @@ class InstructionNode(object):
 	def __init__(self, params, instrStr, comment = ""):
 		self.params = params
 		self.params_write = [False for _ in flatten(params)]
+		self.write_params = {}
 		self.instrStr = instrStr
 		self.comment = comment
 		for key, p in enumerate(flatten(params)):
@@ -14,6 +15,7 @@ class InstructionNode(object):
 
 	def set_write_param(self, i):
 		self.params_write[i] = True
+		self.write_params[i] = True
 		return self
 
 	def get_param(self, i):
@@ -244,7 +246,7 @@ class P_CP(PseudoInstructionNode):
 
 class P_ADD(PseudoInstructionNode):
 	def __init__(self, p1, p2, p3, comment = ""):
-		super(P_SUB, self).__init__([p1, p2, p3], "P_ADD", comment)
+		super(P_ADD, self).__init__([p1, p2, p3], "P_ADD", comment)
 	def rep(self):
 		_WM = self.params[0].manager
 		_next1 = _WM.getNext()
@@ -279,6 +281,18 @@ class P_GOTO(PseudoInstructionNode):
 		return "(PSD) goto {0}; // {1}".format(self.params[0], self.comment)
 	def __repr__(self):
 		return "P_GOTO {0}".format(self.params[0])
+
+class P_STACK_PUSH(PseudoInstructionNode):
+	def __init__(self, p1, comment = ""):
+		super(P_STACK_PUSH, self).__init__([p1], "P_STACK_PUSH", comment)
+	def rep(self):
+		pass
+
+
+	def __str__(self):
+		return "(PSD) push {0}; // {1}".format(self.params[0], self.comment)
+	def __repr__(self):
+		return "P_STACK_PUSH {0}".format(self.params[0])
 
 class ClassName(object):
 	"""docstring for ClassName"""

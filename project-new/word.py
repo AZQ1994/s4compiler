@@ -18,6 +18,8 @@ class Word(object):
 		self.pointers = {}
 		self.namespace = None
 
+		self.interval = None
+
 	def new_ptr(self, name = None):
 		ptr = self.manager.new_pointerword(name, self)
 		self.pointers[id(ptr)] = ptr
@@ -44,7 +46,31 @@ class Word(object):
 							raise Exception
 							break
 					p.value = word
-						
+	
+	def calculate_interval(self):# on going
+		path = {}
+		check_points = {}
+		to_do_stack = []
+		for ins in self.used:
+			check = False
+			for i in self.used[ins]:
+				if ins.params_write[i] == True:
+					check = True
+			check_points[ins] = check
+			to_do_stack.append((ins, []))
+"""
+		while len(to_do_stack) != 0:
+			ins, ins_list = to_do_stack.pop()
+			if ins in check_points:
+				for ins in ins_list:
+					path[ins] = True
+"""
+
+
+
+		# phi mode ?
+
+
 
 	def to_asm(self):
 		return "WORD"

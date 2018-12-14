@@ -107,7 +107,7 @@ class BuildPass(Pass):
 
 				# argument information # TODO 20181128
 				append_node = append_node.append(
-					SystemNode(args, "function {0}({1}):".format(function_name, ",".join([str(arg.name) for arg in args]))))
+					SystemNode([], "function {0}({1}):".format(function_name, ",".join([str(arg.name) for arg in args]))))
 				
 				""" 20181125 TODO
 
@@ -337,13 +337,13 @@ class BuildPass(Pass):
 							if check_ins.prev != None:
 								need_check.append(check_ins.prev)
 					
-					for s in source_list:
-						if s not in check:
-							print des, s
-							des.replace_by(s)
-							break
-						else:
-							print des, s, False
+					#for s in source_list:
+					#	if s not in check:
+					#		print des, s
+					#		des.replace_by(s)
+					#		break
+					#	else:
+					#		print des, s, False
 
 
 				
@@ -590,7 +590,7 @@ def build_phi(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict)
 	for op_string in op.split(","):
 		res = phi_op_pattern.match(op_string)
 		params.append(WM.new_address(None, BB_dict[res.group(2)].start))
-		params.append(WM.get_or_add_word(res.group(1)))
+		params.append(WM.get_or_add_word(res.group(1)).new_ptr())
 	node = IRPhi(params, ins_name, BB_dict[bb_name])
 	node.set_write_param(0)
 	return node
