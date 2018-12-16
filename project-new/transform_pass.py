@@ -25,18 +25,20 @@ class TransformPass(Pass):
 
 
 		while current != None:
+			logs = []
 			n = None
 			c_n = current.next
 			if current.instrStr in transform_dict:
-				n = transform_dict[current.instrStr](current, WM)
+				n = transform_dict[current.instrStr](current, WM, logs)
 			if n != None:
 				current = n
 			else:
 				current = c_n
+			self.debug_logs(logs)
 
-		#self.print_asm()
+		self.print_asm()
 
-def trans_sub(IN, WM):
+def trans_sub(IN, WM, logs):
 	p0 = IN.params[0]
 	p1 = IN.params[1]
 	p2 = IN.params[2]
@@ -44,7 +46,7 @@ def trans_sub(IN, WM):
 	node = P_SUB(p2, p1, p0)
 	IN.replace_by(node)
 
-def trans_add(IN, WM):
+def trans_add(IN, WM, logs):
 	p0 = IN.params[0]
 	p1 = IN.params[1]
 	p2 = IN.params[2]
@@ -52,12 +54,18 @@ def trans_add(IN, WM):
 	node = P_ADD(p2, p1, p0)
 	IN.replace_by(node)
 
-def trans_alloca(IN, WM):
+def trans_alloca(IN, WM, logs):
 	IN.remove()
 	#IN.params[0].
+	logs.append(("removing alloca:"+str(IN),3))
+
+def trans_br1(IN, WM, logs):
+	p0 = IN.params[0]
+	IN.replace_by(P_GOTO(p0))
 
 transform_dict = {
 	"add": trans_add,
 	"sub": trans_sub,
 	#"add": trans_sub,
+	"br": trans_br1,
 }

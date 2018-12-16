@@ -31,114 +31,99 @@ class PreTransformPass(Pass):
 				var.calculate_interval()
 
 		while current != None:
+			logs = []
 			n = None
 			c_n = current.next
 			if current.instrStr in transform_dict:
-				n = transform_dict[current.instrStr](current, WM)
+				n = transform_dict[current.instrStr](current, WM, logs)
 			if n != None:
 				current = n
 			else:
 				current = c_n
+			self.debug_logs(logs)
 
 		#self.print_asm()
 
-def trans_call(IN, WM):
+def trans_call(IN, WM, logs):
+	# call:
+	# save variables: push
+	# copy args
+	# push return address
+	# goto function 							# function-> copy result, pop address, go back
+	# &return address
+	# copy result
+	# pop saved variables
+	# 
+
+
 	# need save
-	need_save = {}
-	print "!!!!!!!!!!!!!"
+	need_save = []
+
 	# which variable should be saved
 	# - written in front, read in below or following blocks
 	
 	for var in WM.book:
 		if isinstance(var, DataWord):
 			if IN in var.interval and IN.next in var.interval:
-				print var
+				need_save.append(var)
+	
+	first_node = SystemNode([],"call")
+	append_node = first_node
+	# push
+	for var in need_save:
+		append_node = append_node.append(P_PUSH(var.new_ptr()))
 
 
+	
+	if IN.des != None:
+		function_addr = IN.params[1]
+		function_name = function_addr.value.func_name
+		function_res = WM.function_return[function_name].new_ptr()
+		copy_res_node = P_CP(IN.des, function_res)
+	else:
+		function_addr = IN.params[0]
+		function_name = function_addr.value.func_name
+		copy_res_node = None
+
+	for var, var_func in zip(IN.call_params, WM.function_args[function_name]):
+		append_node = append_node.append(P_CP(var_func, var))
+
+	return_node = SystemNode([],"call-ret")
+	ret_addr = WM.new_dataaddress("", return_node)
+	
+	# return addr
+	append_node = append_node.append(P_PUSH(ret_addr))
+	# goto
+	append_node = append_node.append(P_GOTO(function_addr))
+
+	append_node = append_node.append(return_node)
+	if copy_res_node != None:
+		append_node = append_node.append(copy_res_node)
+
+	for var in need_save[::-1]:
+		append_node = append_node.append(P_POP(var.new_ptr()))
+
+	IN.replace_by_block(first_node)
 
 
+def trans_ret(IN, WM, logs):
+	# copy result
+	# pop address go back
+	# go back
+	func_name = IN.BB.func_name
+	result = WM.function_return[func_name].new_ptr()
+	first_node = P_CP(result, IN.params[0])
+	ret_addr = WM.new_address("", return_node, WM)
+	append_node = first_node
+	append_node = append_node.append(P_POP(ret_addr))
+	append_node = append_node.append(P_GOTO(ret_addr))
 
+	IN.replace_by_block(first_node)
 
-
-	"""
-	# failed
-
-	finished = {IN: True}
-	stack = [(IN.prev, {IN: True, IN.prev: True})]
-
-	while len(stack) != 0:
-		current, path = stack.pop()
-		if current in finished:
-			continue
-		finished[current] = True
-		for i in current.write_params:
-			p = flatten(current.params)[i]
-			if isinstance(p, PointerWord):
-				p = p.value
-			else:
-				print "notice:", p, type(p)
-				#continue
-			print "checking:", p, current.to_asm()
-			for instr in p.used:
-				if instr not in path:
-					# need save!
-					need_save[p] = True
-					print instr.to_asm()
-
-		if type(current) == BasicBlockStart:
-			for bb in current.BB.from_bb:
-				new_path = path.copy()
-				new_path[bb.end] = True
-				stack.append((bb.end, new_path))
-		else:
-			path[current.prev] = True
-			stack.append((current.prev, path))
-	print "ins:",IN.to_asm()
-	for x in need_save:
-		print "need_save:",x
-		for i in x.used:
-			print i.to_asm()
-
-
-	# evacuate variables
-	# copy params
-	"""
-
-	# search path
-	"""
-	stack = [IN.prev]
-	path = {}
-	changed_vars = {}
-
-	while len(stack) != 0:
-		current = stack.pop()
-		if current in path:
-			continue
-		path[current] = True
-		for i in current.write_params:
-			p = flatten(current.params)[i].value
-			changed_vars[p] = True
-
-		if type(current) == BasicBlockStart:
-			for bb in current.BB.from_bb:
-				stack.append(bb.end)
-		else:
-			stack.append(current.prev)
-
-	for p in changed_vars:
-		print "checking:", p, current.to_asm()
-		for instr in p.used:
-			if instr not in path:
-				# need save!
-				need_save[p] = True
-				print instr.to_asm()
-	"""
-
-def trans_ret(IN, WM):
-	pass
 
 transform_dict = {
 	"call": trans_call,
+	"main-call": trans_call,
 	#"sub": trans_sub,
 	#"add": trans_sub,
 }

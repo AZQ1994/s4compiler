@@ -21,7 +21,12 @@ class Pass(object):
 	#     2: warning
 	#     3: hight-level-warning
 	#     4: error
-
+	def debug_logs(self, info):
+		for log in info:
+			if len(log) == 1:
+				self.debug_log(log[0])
+			else:
+				self.debug_log(log[0], log[1])
 	def debug_log(self, message,level=0):
 		self.debug_info.append(Log(message,level))
 

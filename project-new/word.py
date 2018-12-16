@@ -202,7 +202,11 @@ class PointerWord(Word):
 
 class PointerDataWord(PointerWord):
 	# in prog memory, but a calculated word
-	pass
+	def used_in(self, IN, key):
+		self.used[IN].append(key)
+
+	def no_longer_used_in(self, IN):
+		self.used.pop(IN, None)
 	def __str__(self):
 		return "{0}: {1}".format(self.name, self.value)
 

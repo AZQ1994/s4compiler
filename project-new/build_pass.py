@@ -36,9 +36,10 @@ class BuildPass(Pass):
 		namespace = []
 
 		result_of_main = WM.new_dataword("_ret", 0)
+		result_ptr = result_of_main.new_ptr()
 		address_of_main = WM.new_address("", None) ### NEED TO FILL IN LATER
 		append_node = append_node.append(
-				IRInstructionNode([result_of_main.new_ptr(),[],address_of_main], "main-call", None),### TODO 20181128 IRCall
+				IRCall([result_ptr,address_of_main,[]], "main-call", result_ptr, [], None),### TODO 20181128 IRCall :params, instrStr, des, call_params, BB, comment = ""):
 				P_GOTO(WM.get_HALT())
 			)
 
@@ -142,7 +143,7 @@ class BuildPass(Pass):
 				BB_dict = {}
 				for BB in item1[1]:
 					BB_name = BB.get("name")
-					bb = IRBasicBlock(BB_name)
+					bb = IRBasicBlock(BB_name, function_name)
 					BB_dict[BB_name] = bb
 					#append_node = append_node.append_block(bb.start)
 					self.debug_log("BB: {0}".format(BB_name))
@@ -224,8 +225,9 @@ class BuildPass(Pass):
 				
 				# arguments of the function
 				for arg in args:
-					BB_dict[firstBB_name].start.append(SystemNode([arg],"arg").set_write_param(0))	#
-
+					BB_dict[firstBB_name].start.append(SystemNode([arg.new_ptr()],"arg").set_write_param(0))	#
+				WM.function_args[function_name] = args
+				WM.function_return_word(function_name)
 				### check the BB is executed only once or is looped executed
 				to_be_checked = [BB_dict["entry"]]
 				checked = {}
@@ -398,48 +400,9 @@ class BuildPass(Pass):
 
 				namespace.pop()
 				# end of function
-		address_of_main.value = function_dict["main"]
+		address_of_main.value = function_dict["main"].start
 		#self.print_asm()
 		
-		"""
-		#### test
-		variables = {}
-		data = {}
-		var_len = 0
-
-		inst_index = 0
-		ins = self.startNode
-		while ins != None:
-			for p, is_write in zip(ins.params, ins.params_write):
-				if isinstance(p, PointerWord):
-					if p.value.name in variables:
-						data[p.value.name][inst_index] = is_write
-					else:
-						variables[p.value.name] = var_len
-						var_len += 1
-						data[p.value.name] = {inst_index: is_write}
-			ins = ins.next
-			inst_index += 1
-
-		inst_index = 0
-		ins = self.startNode
-		while ins != None:
-			if isinstance(ins, SystemNode) and ins.instrStr == "bb_start":
-				for var in data:
-					data[var][inst_index] = ">"
-			if isinstance(ins, SystemNode) and ins.instrStr == "bb_end":
-				for var in data:
-					data[var][inst_index] = "|"
-			ins = ins.next
-			inst_index += 1
-		for key, line in data.items():
-			print key,",",
-			for i in range(0, inst_index):
-				if i in line:
-					print "+" if line[i]==True else "-" if line[i] == False else line[i],
-				print ",",
-			print ""
-		"""
 
 		# test
 		stack = []
