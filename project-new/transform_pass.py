@@ -34,7 +34,7 @@ class TransformPass(Pass):
 			else:
 				current = c_n
 
-		self.print_asm()
+		#self.print_asm()
 
 def trans_sub(IN, WM):
 	p0 = IN.params[0]

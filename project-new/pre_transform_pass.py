@@ -24,6 +24,11 @@ class PreTransformPass(Pass):
 		current = self.startNode
 		WM = self.WM
 
+		for var in WM.book:
+			
+			if isinstance(var, DataWord):
+				#print "+ VAR: ",var
+				var.calculate_interval()
 
 		while current != None:
 			n = None
@@ -40,9 +45,21 @@ class PreTransformPass(Pass):
 def trans_call(IN, WM):
 	# need save
 	need_save = {}
-
+	print "!!!!!!!!!!!!!"
 	# which variable should be saved
 	# - written in front, read in below or following blocks
+	
+	for var in WM.book:
+		if isinstance(var, DataWord):
+			if IN in var.interval and IN.next in var.interval:
+				print var
+
+
+
+
+
+
+
 	"""
 	# failed
 

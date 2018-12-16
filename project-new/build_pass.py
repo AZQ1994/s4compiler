@@ -147,8 +147,7 @@ class BuildPass(Pass):
 					#append_node = append_node.append_block(bb.start)
 					self.debug_log("BB: {0}".format(BB_name))
 				
-				for arg in args:
-					BB_dict[firstBB_name].start.append(SystemNode([arg],"arg").set_write_param(0))
+				
 
 				phi_vars = defaultdict(list)
 				for BB in item1[1]:
@@ -222,7 +221,10 @@ class BuildPass(Pass):
 							else:
 								ins = IRInstructionNode(params, ins_name, BB_dict[BB_name])
 						append_node = append_node.append(ins)
-					#
+				
+				# arguments of the function
+				for arg in args:
+					BB_dict[firstBB_name].start.append(SystemNode([arg],"arg").set_write_param(0))	#
 
 				### check the BB is executed only once or is looped executed
 				to_be_checked = [BB_dict["entry"]]
@@ -240,7 +242,9 @@ class BuildPass(Pass):
 				#for i in BB_dict:
 				#	print BB_dict[i].name, BB_dict[i].is_once
 
-				
+				#for des in phi_vars:
+				#	des.calculate_interval()
+				#	print des, des.interval
 				
 				
 

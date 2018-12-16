@@ -293,6 +293,18 @@ class P_STACK_PUSH(PseudoInstructionNode):
 		return "(PSD) push {0}; // {1}".format(self.params[0], self.comment)
 	def __repr__(self):
 		return "P_STACK_PUSH {0}".format(self.params[0])
+class P_STACK_POP(PseudoInstructionNode):
+	def __init__(self, p1, comment = ""):
+		super(P_STACK_POP, self).__init__([p1], "P_STACK_POP", comment)
+	def rep(self):
+		pass
+
+
+	def __str__(self):
+		return "(PSD) pop {0}; // {1}".format(self.params[0], self.comment)
+	def __repr__(self):
+		return "P_STACK_POP {0}".format(self.params[0])
+
 
 class ClassName(object):
 	"""docstring for ClassName"""
