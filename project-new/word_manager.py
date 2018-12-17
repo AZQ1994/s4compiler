@@ -104,7 +104,7 @@ class WordManager(object):
 		if i in self.temp:
 			return self.temp[i]
 		else:
-			self.temp[i] = new_dataword("temp_"+str(i))
+			self.temp[i] = self.new_dataword("temp_"+str(i), 0)
 			return self.temp[i]
 
 	def get_temp_ptr(self, i = 0):

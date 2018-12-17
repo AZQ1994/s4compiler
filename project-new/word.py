@@ -207,6 +207,15 @@ class PointerDataWord(PointerWord):
 
 	def no_longer_used_in(self, IN):
 		self.used.pop(IN, None)
+	def to_asm(self):
+		if isinstance(self.value, Word):
+			value = self.value.name
+		else:
+			value = 0
+		if type(self.name) == str:
+			return "{0}: {1}".format(self.name, value)
+		else:
+			return "{0}".format(value)
 	def __str__(self):
 		return "{0}: {1}".format(self.name, self.value)
 

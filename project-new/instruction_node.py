@@ -190,6 +190,8 @@ class IRBasicBlock(object):
 class SystemNode(InstructionNode):
 	#def __init__(self):
 	#	pass
+	def to_asm(self):
+		return "//"+str(self)
 	def __str__(self):
 		return "(SYS) {0}".format(self.instrStr)
 	def __repr__(self):
@@ -233,7 +235,7 @@ class Subneg4InstructionNode(InstructionNode):
 	def __init__(self, p1, p2, p3, p4, comment = ""):
 		super(Subneg4InstructionNode, self).__init__([p1, p2, p3, p4],"SBN4",comment)
 	def to_asm(self):
-		return "L_{2}: {0[0]} {0[1]} {0[2]} {0[3]}; // {1}".format(self.params, self.comment, id(self))
+		return "L_{2}: {0[0]} {0[1]} {0[2]} {0[3]} // {1}".format([p.to_asm() for p in self.params], self.comment, id(self))
 
 	def __str__(self):
 		return "(SNG) {0[0]} {0[1]} {0[2]} {0[3]}; // {1}".format(self.params, self.comment)
@@ -250,7 +252,7 @@ class P_SUB(PseudoInstructionNode):
 		super(P_SUB, self).__init__([p1, p2, p3], "P_SUB", comment)
 	def rep(self):
 		_WM = self.params[0].manager
-		_next = _WM.getNext()
+		_next = _WM.get_NEXT()
 		rep = Subneg4InstructionNode(self.params[0], self.params[1], self.params[2], _next, self.comment)
 		self.replace_by(rep)
 
@@ -265,9 +267,9 @@ class P_CP(PseudoInstructionNode):
 		super(P_CP, self).__init__([p1, p2], "P_CP", comment)
 	def rep(self):
 		_WM = self.params[0].manager
-		_next = _WM.getNext()
+		_next = _WM.get_NEXT()
 		c_0 = _WM.get_const_ptr(0)
-		rep = Subneg4InstructionNode(c_0, self.params[2], self.params[1], _next, self.comment)
+		rep = Subneg4InstructionNode(c_0, self.params[1], self.params[0], _next, self.comment)
 		self.replace_by(rep)
 
 
@@ -281,8 +283,8 @@ class P_ADD(PseudoInstructionNode):
 		super(P_ADD, self).__init__([p1, p2, p3], "P_ADD", comment)
 	def rep(self):
 		_WM = self.params[0].manager
-		_next1 = _WM.getNext()
-		_next2 = _WM.getNext()
+		_next1 = _WM.get_NEXT()
+		_next2 = _WM.get_NEXT()
 		temp_p1 = _WM.get_temp_ptr()
 		temp_p2 = _WM.get_temp_ptr()
 		c_0 = _WM.get_const_ptr(0)
@@ -303,7 +305,7 @@ class P_GOTO(PseudoInstructionNode):
 		_WM = self.params[0].manager
 		c_0 = _WM.get_const_ptr(0)
 		c_m1 = _WM.get_const_ptr(-1)
-		temp = _WM.getTemp(0)
+		temp = _WM.get_temp_ptr()
 
 		rep = Subneg4InstructionNode(c_0, c_m1, temp, self.params[0], self.comment)
 		self.replace_by(rep)
