@@ -105,3 +105,22 @@ class NoneNode(NameTreeNode):
 		return "NoneNode"
 	def __str__(self):
 		return "NoneNode"
+
+from collections import defaultdict
+# handling address used before declared
+class AddressBeforeUsingHandler(object):
+	def __init__(self, WM):
+		self.address_dict = []
+		self.to_do_dict = defaultdict(list)
+		self.WM = WM
+	def attach(self, ins_node, name):
+		self.address_dict[name] = ins_node
+		return ins_node
+	def use(self, name):
+		address = self.WM.new_address("", None)
+		self.to_do_dict[name].append(address)
+		return address
+	def solve(self):
+		for name, address_list in self.to_do_dict.items():
+			for address in address_list:
+				address.value = self.address_dict[name]
