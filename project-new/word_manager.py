@@ -1,4 +1,4 @@
-from word import Word, DataWord, DataWords, PointerWord, DataPointerWord, PointerDataWord, Address
+from word import Word, DataWord, DataWords, PointerWord, DataPointerWord, PointerDataWord, Address, DataAddress
 from utils import NamespaceTree, NameTreeNode
 
 
@@ -9,7 +9,14 @@ class WordManager(object):
 		self.currentNamespace = []
 		self.const = {}
 		self.temp = {}
-
+		self.function_args = {}
+		self.function_return = {}
+		stack = self.new_datawords("sys_stack", [0]*100, [])
+		self.stack = {'pointer': stack, 'stack': stack.array[0]}
+	def function_return_word(self, func_name):
+		res = self.new_dataword(func_name, 0)
+		self.function_return[func_name] = res
+		return res
 	def new_word(self,  _type, name, value, namespace = None):
 		if namespace == None:
 			namespace = self.currentNamespace
@@ -26,10 +33,10 @@ class WordManager(object):
 			namespace = self.currentNamespace
 		return self.namespace.add_word(DataPointerWord(name, value, self), namespace)
 	
-	def new_datawords(self, name, value, namespace = None):
+	def new_datawords(self, name, values, namespace = None):
 		if namespace == None:
 			namespace = self.currentNamespace
-		return self.namespace.add_word(DataWords(name, value, self), namespace)
+		return self.namespace.add_word(DataWords(name, values, self), namespace)
 
 	def new_pointerword(self, name, value, namespace = None):
 		if namespace == None:
@@ -47,12 +54,18 @@ class WordManager(object):
 			namespace = self.currentNamespace
 		return self.namespace.add_word(Address(name, value, self), namespace)
 
+	def new_dataaddress(self, name, value, namespace = None):
+		if namespace == None:
+			namespace = self.currentNamespace
+		return self.namespace.add_word(DataAddress(name, value, self), namespace)
+
 	def reg(self, word):
 		# called on creating a word object
 		self.book[word] = word
 
 	def add_namespace(self, namespace):
 		self.currentNamespace = namespace
+		print "ns",self.currentNamespace
 		self.namespace.add_namespace(namespace)
 
 	def get_HALT(self, namespace = None): ### TODO
@@ -91,7 +104,7 @@ class WordManager(object):
 		if i in self.temp:
 			return self.temp[i]
 		else:
-			self.temp[i] = new_dataword("temp_"+str(i))
+			self.temp[i] = self.new_dataword("temp_"+str(i), 0)
 			return self.temp[i]
 
 	def get_temp_ptr(self, i = 0):

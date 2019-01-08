@@ -1,6 +1,8 @@
 
 from build_pass import BuildPass
+from pre_transform_pass import PreTransformPass
 from transform_pass import TransformPass
+from assemble_pass import AssemblePass
 from instruction_node import SystemNode
 from word_manager import WordManager
 import re
@@ -32,11 +34,19 @@ class Backend(object):
 		bp = BuildPass(self.WM, self.startNode, self.endNode, tree)
 		bp.debug_execute()
 
+	def pre_transform_pass(self):
+		tp = PreTransformPass(self.WM, self.startNode, self.endNode)
+		tp.debug_execute()
+
 	def transform_pass(self):
 		tp = TransformPass(self.WM, self.startNode, self.endNode)
 		tp.debug_execute()
-
+	def assemble_pass(self):
+		tp = AssemblePass(self.WM, self.startNode, self.endNode)
+		tp.debug_execute()
 #b = Backend("../test/test_code_05/array.xml")
 b = Backend("../test/test_code_quick/mips-quick-test.xml")
 b.build_pass()
+b.pre_transform_pass()
 b.transform_pass()
+b.assemble_pass()

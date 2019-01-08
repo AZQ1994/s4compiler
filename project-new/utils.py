@@ -53,7 +53,7 @@ class NameTreeNode(object):
 			parent.leaves[name] = self
 	
 	def add_word(self, word):
-		self.content[id(word)] = word
+		self.content[word] = word
 		self.name_dict[word.name] = word
 
 	def search_word(self, name):

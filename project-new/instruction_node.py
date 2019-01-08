@@ -5,6 +5,7 @@ class InstructionNode(object):
 	def __init__(self, params, instrStr, comment = ""):
 		self.params = params
 		self.params_write = [False for _ in flatten(params)]
+		self.write_params = {}
 		self.instrStr = instrStr
 		self.comment = comment
 		for key, p in enumerate(flatten(params)):
@@ -14,6 +15,7 @@ class InstructionNode(object):
 
 	def set_write_param(self, i):
 		self.params_write[i] = True
+		self.write_params[i] = True
 		return self
 
 	def get_param(self, i):
@@ -37,14 +39,15 @@ class InstructionNode(object):
 		IN.prev = self
 		return self
 	def append(self, *INs):
-		temp = self.next
+		_next = self.next
 		current = self
 		for IN in INs:
 			current.next = IN
 			IN.prev = current
 			current = IN
-		current.next = temp
-		temp.prev = current
+		current.next = _next
+		if _next != None:
+			_next.prev = current
 		return current
 	def appendINs(self, INs):
 		temp = self.next
@@ -76,7 +79,37 @@ class InstructionNode(object):
 
 		del self
 		return IN
-	
+	def replace_by_INs(self, INs):
+		# !!! TODO !!! need to change the addresses
+
+		_next = self.next
+		current = self.prev
+
+		for IN in INs:
+			current.next = IN
+			IN.prev = current
+			current = IN
+		current.next = _next
+		_next.prev = current
+		his = self.prev.next
+		del self
+		return his
+	def replace_by_block(self, IN):
+		_prev = self.prev
+		_next = self.next
+		_prev.next = IN
+		IN.prev = _prev
+		current = IN
+
+		while current.next != None:
+			current = current.next
+		
+		current.next = _next
+		_next.prev = current
+
+		del self
+		return current
+
 	def remove(self):
 		_next = self.next
 		self.prev.next = _next
@@ -138,8 +171,9 @@ class IRFunction(object):
 		self.start.set_next(self.end)
 
 class IRBasicBlock(object):
-	def __init__(self, name):
+	def __init__(self, name, func_name):
 		self.name = name
+		self.func_name = func_name
 		self.start = BasicBlockStart(name, self)
 		self.end = BasicBlockEnd(name, self)
 		self.start.set_next(self.end)
@@ -156,6 +190,8 @@ class IRBasicBlock(object):
 class SystemNode(InstructionNode):
 	#def __init__(self):
 	#	pass
+	def to_asm(self):
+		return "//"+str(self)
 	def __str__(self):
 		return "(SYS) {0}".format(self.instrStr)
 	def __repr__(self):
@@ -186,7 +222,7 @@ class FunctionStart(SystemNode):
 	def to_asm(self):
 		return "L_{0}: // {1}".format(id(self), self.func_name)
 	def __str__(self):
-		return ""
+		return "function start:"+self.func_name
 class FunctionEnd(SystemNode):
 	def __init__(self, name):
 		super(FunctionEnd, self).__init__([], "func_end", "function end: " + name)
@@ -199,7 +235,7 @@ class Subneg4InstructionNode(InstructionNode):
 	def __init__(self, p1, p2, p3, p4, comment = ""):
 		super(Subneg4InstructionNode, self).__init__([p1, p2, p3, p4],"SBN4",comment)
 	def to_asm(self):
-		return "L_{2}: {0[0]} {0[1]} {0[2]} {0[3]}; // {1}".format(self.params, self.comment, id(self))
+		return "L_{2}: {0[0]} {0[1]} {0[2]} {0[3]} // {1}".format([p.to_asm() for p in self.params], self.comment, id(self))
 
 	def __str__(self):
 		return "(SNG) {0[0]} {0[1]} {0[2]} {0[3]}; // {1}".format(self.params, self.comment)
@@ -216,7 +252,7 @@ class P_SUB(PseudoInstructionNode):
 		super(P_SUB, self).__init__([p1, p2, p3], "P_SUB", comment)
 	def rep(self):
 		_WM = self.params[0].manager
-		_next = _WM.getNext()
+		_next = _WM.get_NEXT()
 		rep = Subneg4InstructionNode(self.params[0], self.params[1], self.params[2], _next, self.comment)
 		self.replace_by(rep)
 
@@ -226,13 +262,29 @@ class P_SUB(PseudoInstructionNode):
 	def __repr__(self):
 		return "P_SUB {0[0]} {0[1]} {0[2]}".format(self.params)
 
-class P_ADD(PseudoInstructionNode):
-	def __init__(self, p1, p2, p3, comment = ""):
-		super(P_SUB, self).__init__([p1, p2, p3], "P_ADD", comment)
+class P_CP(PseudoInstructionNode):
+	def __init__(self, p1, p2, comment = ""):
+		super(P_CP, self).__init__([p1, p2], "P_CP", comment)
 	def rep(self):
 		_WM = self.params[0].manager
-		_next1 = _WM.getNext()
-		_next2 = _WM.getNext()
+		_next = _WM.get_NEXT()
+		c_0 = _WM.get_const_ptr(0)
+		rep = Subneg4InstructionNode(c_0, self.params[1], self.params[0], _next, self.comment)
+		self.replace_by(rep)
+
+
+	def __str__(self):
+		return "(PSD) {0} = {1}; // {2}".format(self.params[0], self.params[1], self.comment)
+	def __repr__(self):
+		return "P_CP {0[0]} {0[1]}".format(self.params)
+
+class P_ADD(PseudoInstructionNode):
+	def __init__(self, p1, p2, p3, comment = ""):
+		super(P_ADD, self).__init__([p1, p2, p3], "P_ADD", comment)
+	def rep(self):
+		_WM = self.params[0].manager
+		_next1 = _WM.get_NEXT()
+		_next2 = _WM.get_NEXT()
 		temp_p1 = _WM.get_temp_ptr()
 		temp_p2 = _WM.get_temp_ptr()
 		c_0 = _WM.get_const_ptr(0)
@@ -251,9 +303,9 @@ class P_GOTO(PseudoInstructionNode):
 		super(P_GOTO, self).__init__([p1], "P_GOTO", comment)
 	def rep(self):
 		_WM = self.params[0].manager
-		c_0 = _WM.const(0)
-		c_m1 = _WM.const(-1)
-		temp = _WM.getTemp(0)
+		c_0 = _WM.get_const_ptr(0)
+		c_m1 = _WM.get_const_ptr(-1)
+		temp = _WM.get_temp_ptr()
 
 		rep = Subneg4InstructionNode(c_0, c_m1, temp, self.params[0], self.comment)
 		self.replace_by(rep)
@@ -263,6 +315,51 @@ class P_GOTO(PseudoInstructionNode):
 		return "(PSD) goto {0}; // {1}".format(self.params[0], self.comment)
 	def __repr__(self):
 		return "P_GOTO {0}".format(self.params[0])
+
+class P_PUSH(PseudoInstructionNode):
+	def __init__(self, p1, comment = ""):
+		super(P_PUSH, self).__init__([p1], "P_PUSH", comment)
+	def rep(self):
+		param = self.params[0]
+		WM = param.manager
+		write = WM.new_pointerdataword("", None)
+		c_m1 = WM.get_const_ptr(-1)
+		stack_pointer = WM.stack["pointer"]
+
+		nodes = [
+			P_CP(write.new_ptr(), stack_pointer.new_ptr()),
+			P_CP(write, param.new_ptr()),
+			P_SUB(c_m1, stack_pointer.new_ptr(), stack_pointer.new_ptr())
+		]
+		self.replace_by_INs(nodes)
+
+	def __str__(self):
+		return "(PSD) push {0}; // {1}".format(self.params[0], self.comment)
+	def __repr__(self):
+		return "P_PUSH {0}".format(self.params[0])
+class P_POP(PseudoInstructionNode):
+	def __init__(self, p1, comment = ""):
+		super(P_POP, self).__init__([p1], "P_POP", comment)
+	def rep(self):
+		param = self.params[0]
+		WM = param.manager
+		read = WM.new_pointerdataword("", None)
+		c_1 = WM.get_const_ptr(1)
+		stack_pointer = WM.stack["pointer"]
+
+		nodes = [
+			P_SUB(c_1, stack_pointer.new_ptr(), stack_pointer.new_ptr()),
+			P_CP(read.new_ptr(), stack_pointer.new_ptr()),
+			P_CP(param.new_ptr(), read)
+		]
+		self.replace_by_INs(nodes)
+
+
+	def __str__(self):
+		return "(PSD) pop {0}; // {1}".format(self.params[0], self.comment)
+	def __repr__(self):
+		return "P_POP {0}".format(self.params[0])
+
 
 class ClassName(object):
 	"""docstring for ClassName"""

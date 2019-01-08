@@ -36,14 +36,15 @@ class BuildPass(Pass):
 		namespace = []
 
 		result_of_main = WM.new_dataword("_ret", 0)
+		result_ptr = result_of_main.new_ptr()
 		address_of_main = WM.new_address("", None) ### NEED TO FILL IN LATER
 		append_node = append_node.append(
-				IRInstructionNode([result_of_main.new_ptr(),[],address_of_main], "call", None),### TODO 20181128 IRCall
+				IRCall([result_ptr,address_of_main,[]], "main-call", result_ptr, [], None),### TODO 20181128 IRCall :params, instrStr, des, call_params, BB, comment = ""):
 				P_GOTO(WM.get_HALT())
 			)
 
 		namespace.append("M_")
-		WM.namespace.add_namespace(namespace)
+		WM.add_namespace(namespace)
 
 		self.debug_log("Starting parsing xml tree...")
 		module = self.xmltree.getroot()
@@ -94,7 +95,7 @@ class BuildPass(Pass):
 				
 				### namespace push function name
 				namespace.append(function_name)
-				WM.namespace.add_namespace(namespace)
+				WM.add_namespace(namespace)
 
 				### prepare graph
 				# self.bb_graph[function_name] = Graph()
@@ -107,7 +108,7 @@ class BuildPass(Pass):
 
 				# argument information # TODO 20181128
 				append_node = append_node.append(
-					SystemNode(args, "function {0}({1}):".format(function_name, ",".join([str(arg.name) for arg in args]))))
+					SystemNode([], "function {0}({1}):".format(function_name, ",".join([str(arg.name) for arg in args]))))
 				
 				""" 20181125 TODO
 
@@ -142,13 +143,12 @@ class BuildPass(Pass):
 				BB_dict = {}
 				for BB in item1[1]:
 					BB_name = BB.get("name")
-					bb = IRBasicBlock(BB_name)
+					bb = IRBasicBlock(BB_name, function_name)
 					BB_dict[BB_name] = bb
 					#append_node = append_node.append_block(bb.start)
 					self.debug_log("BB: {0}".format(BB_name))
 				
-				for arg in args:
-					BB_dict[firstBB_name].start.append(SystemNode([arg],"arg").set_write_param(0))
+				
 
 				phi_vars = defaultdict(list)
 				for BB in item1[1]:
@@ -222,8 +222,12 @@ class BuildPass(Pass):
 							else:
 								ins = IRInstructionNode(params, ins_name, BB_dict[BB_name])
 						append_node = append_node.append(ins)
-					#
-
+				
+				# arguments of the function
+				for arg in args:
+					BB_dict[firstBB_name].start.append(SystemNode([arg.new_ptr()],"arg").set_write_param(0))	#
+				WM.function_args[function_name] = args
+				WM.function_return_word(function_name)
 				### check the BB is executed only once or is looped executed
 				to_be_checked = [BB_dict["entry"]]
 				checked = {}
@@ -240,7 +244,9 @@ class BuildPass(Pass):
 				#for i in BB_dict:
 				#	print BB_dict[i].name, BB_dict[i].is_once
 
-				
+				#for des in phi_vars:
+				#	des.calculate_interval()
+				#	print des, des.interval
 				
 				
 
@@ -337,13 +343,13 @@ class BuildPass(Pass):
 							if check_ins.prev != None:
 								need_check.append(check_ins.prev)
 					
-					for s in source_list:
-						if s not in check:
-							print des, s
-							des.replace_by(s)
-							break
-						else:
-							print des, s, False
+					#for s in source_list:
+					#	if s not in check:
+					#		print des, s
+					#		des.replace_by(s)
+					#		break
+					#	else:
+					#		print des, s, False
 
 
 				
@@ -392,50 +398,11 @@ class BuildPass(Pass):
 							break;
 				
 
-				
-
-		address_of_main.value = function_dict["main"]
+				namespace.pop()
+				# end of function
+		address_of_main.value = function_dict["main"].start
 		#self.print_asm()
 		
-		"""
-		#### test
-		variables = {}
-		data = {}
-		var_len = 0
-
-		inst_index = 0
-		ins = self.startNode
-		while ins != None:
-			for p, is_write in zip(ins.params, ins.params_write):
-				if isinstance(p, PointerWord):
-					if p.value.name in variables:
-						data[p.value.name][inst_index] = is_write
-					else:
-						variables[p.value.name] = var_len
-						var_len += 1
-						data[p.value.name] = {inst_index: is_write}
-			ins = ins.next
-			inst_index += 1
-
-		inst_index = 0
-		ins = self.startNode
-		while ins != None:
-			if isinstance(ins, SystemNode) and ins.instrStr == "bb_start":
-				for var in data:
-					data[var][inst_index] = ">"
-			if isinstance(ins, SystemNode) and ins.instrStr == "bb_end":
-				for var in data:
-					data[var][inst_index] = "|"
-			ins = ins.next
-			inst_index += 1
-		for key, line in data.items():
-			print key,",",
-			for i in range(0, inst_index):
-				if i in line:
-					print "+" if line[i]==True else "-" if line[i] == False else line[i],
-				print ",",
-			print ""
-		"""
 
 		# test
 		stack = []
@@ -590,7 +557,7 @@ def build_phi(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict)
 	for op_string in op.split(","):
 		res = phi_op_pattern.match(op_string)
 		params.append(WM.new_address(None, BB_dict[res.group(2)].start))
-		params.append(WM.get_or_add_word(res.group(1)))
+		params.append(WM.get_or_add_word(res.group(1)).new_ptr())
 	node = IRPhi(params, ins_name, BB_dict[bb_name])
 	node.set_write_param(0)
 	return node
