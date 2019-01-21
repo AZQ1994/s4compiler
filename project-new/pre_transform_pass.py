@@ -173,13 +173,28 @@ def gep_store(current):
 	WM.unreg(i1.params[2])
 	i1.remove()
 	i2.remove()
+def icmp_x_br3(current):
+	i1 = current
+	i2 = i1.next
+	i3 = i2.next
+
+	i1.prev.set_next(i2)
+	i2.set_next(i1)
+	i1.set_next(i3)
+	return i2
 
 combination_dict = {
 	"icmp_slt" : {
 		"br3" : comb_icmp_br3,
+		"*" : {
+			"br3": icmp_x_br3,
+		}
 	},
 	"icmp_sgt" : {
 		"br3" : comb_icmp_br3,
+		"*" : {
+			"br3": icmp_x_br3,
+		}
 	},
 	"getelementptr": {
 		"load": gep_load,
