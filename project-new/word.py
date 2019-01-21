@@ -22,7 +22,7 @@ class Word(object):
 
 	def new_ptr(self, name = None):
 		ptr = self.manager.new_pointerword(name, self)
-		self.pointers[id(ptr)] = ptr
+		self.pointers[ptr] = ptr
 		return ptr
 
 	def used_in(self, IN, key):
@@ -32,90 +32,122 @@ class Word(object):
 		self.used.pop(IN, None)
 
 	def replace_by(self, word):
-		print "replacing:", self, word
+		print "replacing:", self, "->", word
 		for IN, indexs in self.used.items():
+			#print "$ set param ", IN, indexs
+			#print "word original", word.used[IN]
 			for index in indexs:
-				if IN.params[index] == self:
+				if flatten(IN.params)[index] == self:
 					IN.set_param(index, word)
+					#word.used_in(IN, index)
+					#self.no_longer_used_in(IN)
 				else:
 					p = flatten(IN.params)[index]
+					
 					while p.value != self:
+						#print "+1"
 						if isinstance(p, Word):
 							p = p.value
 						else:
 							raise Exception
 							break
+					#p.value.no_longer_used_in(IN)
 					p.value = word
-	
-	def calculate_interval(self):# on going
+					word.used_in(IN, index)
+					print word.used[IN]
+			
+	def calculate_interval(self):
 
-		BB_map = defaultdict(dict)
+		BB_map = defaultdict(dict) # from a bb, which bb is possible entrance
+		#
 		finished = {}
 		check_after = []
+		self.interval = {}
+		# This search begins from back to forward
+		# 3 stages:
+		#	1. check
+		# 	2. mark
 		for ins in self.used:
-			check = True # is_write
+			#print ">.>.>", ins
+			has_write = False
+			has_read = False
 			for i in self.used[ins]:
-				if ins.params_write[i] != True:
-					check = False
-			if check:
-				# finished
+				if ins.params_write[i] == True:
+					has_write = True
+				else:
+					has_read = True
+			if has_write:
 				self.interval[ins] = True
+			if not has_read:
 				continue
-			stack = [(ins,[],True)]
+
+			# this instruction has 'read'
+			stack = [(ins, [])] #[(next_node, mark_list, ),...]
 
 			while len(stack) != 0:
-				current, to_do_stack, real_fin = stack.pop()
-				#print current
-				if current in finished and finished[current] == True:
-					if current in self.interval:
-						for i in to_do_stack:
+				current, mark_list = stack.pop()
+				#print ".....", current, mark_list
+				if current in finished:
+					if current in self.interval: # finished, so mark all
+						for i in mark_list:
 							self.interval[i] = True
 					else:
-						check_after.append((current,to_do_stack))
+						# finished, but still not marked
+						check_after.append((current, mark_list))
+						#print "check after:", current, mark_list
 					continue
 				if hasattr(current, "BB") and current.BB == None:
-					#print "NO BB!", current
+					# no BB (ex. calling main)
 					continue
+				
+				# word is used in current
 				if current in self.used:
-					check = True # is_read
+					finished[current] = True
+					has_write = False
+					has_read = False
 					for i in self.used[current]:
-						if current.params_write[i] != True:
-							check = False
-					if check:
-						# check to finished
-						for i in to_do_stack:
+						if current.params_write[i] == True:
+							has_write = True
+						else:
+							has_read = True
+
+					if has_write:
+						for i in mark_list:
 							self.interval[i] = True
+						mark_list = []
+						#print "wrote"
+					if not has_read:
 						continue
-
+					if isinstance(current, instruction_node.PrePhi):
+						if not has_write and current == ins:
+							finished.pop(current)
+						if has_write or current == ins: # two ways? or one way
+							for i in self.used[current]:
+								if current.params_write[i] == False:
+									#current.params
+									x = 0
+									BB = None
+									for ps in current.params:
+										x += len(ps)*2-1
+										if i < x:
+											BB = ps[0].value.BB
+											break
+									BB_map[current.BB][BB] = True
+						else:
+							BB_map.pop(current.BB, None)
+					stack.append((current.prev, mark_list+[current]))
 					
-
-					# not finished, current is in used
-					if isinstance(current, instruction_node.IRPhi):
-						# so that we should investigate path
-						real_fin = False
-						for i in self.used[current]:
-							if current.params_write[i] == False:
-								BB = current.params[i - 1].value.BB
-								BB_map[current.BB][BB] = True
-					else:
-						for BB in current.BB.from_bb:
-							BB_map[current.BB][BB] = True
-
-					stack.append((current.prev, to_do_stack+[current], real_fin))
-					finished[current] = real_fin
 				else:
-					# current not using 'self'
-					finished[current] = real_fin
+					finished[current] = True
 					if isinstance(current, instruction_node.BasicBlockStart):
 						if current.BB in BB_map:
 							for BB in BB_map[current.BB]:
-								stack.append((BB.end, to_do_stack+[current], True))
+								stack.append((BB.end, mark_list+[current]))
 						else:
 							for BB in current.BB.from_bb:
-								stack.append((BB.end, to_do_stack+[current], True))
+								stack.append((BB.end, mark_list+[current]))
 					else:
-						#self.interval[current] = True
-						stack.append((current.prev, to_do_stack+[current], real_fin))
+						stack.append((current.prev, mark_list+[current]))
 		check = True
 		while check:
 			check = False
@@ -125,7 +157,40 @@ class Word(object):
 					check_after.pop(key)
 					for i in to_do_stack:
 						self.interval[i] = True
+		for ins in self.interval:
+			has_write = False
+			has_read = False
+			if ins in self.used:
+				for i in self.used[ins]:
+					if ins.params_write[i] == True:
+						has_write = True
+					else:
+						has_read = True
+				if has_read and has_write:
+					self.interval[ins] = ")("
+				elif has_write:
+					self.interval[ins] = "("
+				elif ins.next in self.interval: # has read but the next node is also in the interval
+					if ins.next in self.used:
+						has_write_1 = False
+						has_read_1 = False
+						for i in self.used[ins.next]:
+							if ins.next.params_write[i] == True:
+								has_write_1 = True
+							else:
+								has_read_1 = True
+						if not has_read_1 and has_write_1:
+							self.interval[ins] = ")"
+						else:
+							self.interval[ins] = "-"
+					else:
+						self.interval[ins] = "-"
+				else: # last node of a interval
+					self.interval[ins] = ")"
 
+			else:
+				self.interval[ins] = "-"
+	
 	def to_asm(self):
 		return "WORD"
 
@@ -161,6 +226,17 @@ class DataPointerWord(DataWord):
 				return "(ptr){0}".format(self.value.name)
 			else:
 				return "(ptr)null"
+	def to_asm(self):
+		if type(self.name) == str:
+			if isinstance(self.value, Word):
+				return "{0}: 0".format(self.name, self.value.name)
+			else:
+				return "{0}: 0".format(self.name)
+		else:
+			if isinstance(self.value, Word):
+				return "{0}".format(self.value.name)
+			else:
+				return "0"
 
 class DataWords(DataPointerWord):
 	def __init__(self, name, values, manager):
@@ -186,7 +262,7 @@ class PointerWord(Word):
 	def no_longer_used_in(self, IN):
 		self.used.pop(IN, None)
 		if isinstance(self.value, Word):
-			self.value.pop(IN, None) # no recursive call
+			self.value.used.pop(IN, None) # no recursive call
 
 	def to_asm(self):
 		if type(self.name) == str:
@@ -212,10 +288,8 @@ class PointerDataWord(PointerWord):
 			value = self.value.name
 		else:
 			value = 0
-		if type(self.name) == str:
-			return "{0}: {1}".format(self.name, value)
-		else:
-			return "{0}".format(value)
+		
+		return "{0}: {1}".format(self.name, value)
 	def __str__(self):
 		return "{0}: {1}".format(self.name, self.value)
 
@@ -224,6 +298,10 @@ class Address(Word):
 		super(Address, self).__init__("address", name, value, manager)
 
 	def to_asm(self):
+		if self.value == "HALT":
+			return "HALT"
+		if self.value == "NEXT":
+			return "NEXT"
 		if type(self.name) != str:
 			if isinstance(self.value, object):
 				return "L_{0}".format(id(self.value)) ### TODO 20181127 # how to represent a label

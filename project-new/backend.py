@@ -45,8 +45,12 @@ class Backend(object):
 		tp = AssemblePass(self.WM, self.startNode, self.endNode)
 		tp.debug_execute()
 #b = Backend("../test/test_code_05/array.xml")
-b = Backend("../test/test_code_quick/mips-quick-test.xml")
+#b = Backend("../test/test_code_quick/mips-quick-test.xml")
+#b = Backend("../test/test_code_quick/mips-quick.xml")
+b = Backend("../test/test_code_quick_new/main.xml")
+#b = Backend("../test/test_code_loop/main.xml")
 b.build_pass()
+
 b.pre_transform_pass()
 b.transform_pass()
 b.assemble_pass()

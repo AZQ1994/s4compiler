@@ -71,7 +71,12 @@ class Pass(object):
 
 		while current != None:
 			for p in flatten(current.params):
-				book.pop(id(p))
+				if p in book:
+					book.pop(p)
+				else:
+					print "Warning: word not found in book"
+					print p
+					print current
 			self.debug_log( current, 2 )
 			current = current.next
 
@@ -87,8 +92,10 @@ class Pass(object):
 		while current != None:
 			for p in flatten(current.params):
 				book.pop(p, None)
-			self.debug_log( current.to_asm(), 2 )
+			#self.debug_log( current.to_asm(), 2 )
+			print current.to_asm()
 			current = current.next
 
 		for item in book.values():
-			self.debug_log( item.to_asm(), 2 )
+			#self.debug_log( item.to_asm(), 2 )
+			print item.to_asm()

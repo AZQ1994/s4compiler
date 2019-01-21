@@ -1,0 +1,43 @@
+<Module>
+  <!-- ; ModuleID = 'main.bc' -->
+  <!-- source_filename = " main.c  "-->
+  <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
+  <!-- target triple = "ppc32" -->
+  <Globals>
+    <Variable name="upto" Vtype="global" type="i32" init="25" align="4" />
+    <Variable name="data" Vtype="global" type="[10 x i32]" init="[i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10]" align="4" />
+  </Globals>
+
+  <!-- Function Attrs: norecurse nounwind readonly -->
+  <Function linkage="" mode="define" returnType="i32" name="main">
+    <Arguments number="0">
+    </Arguments>
+    <BasicBlocks>
+      <BasicBlock name="entry">
+        <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="upto" />
+        <Instruction des="cmp5" opName="icmp_sgt" type="i32" operands="r-0,0" />
+        <Instruction opName="br" operands="[i1]cmp5, [label]while.body.preheader, [label]while.end" />
+      </BasicBlock>
+      <BasicBlock name="while.body.preheader">
+        <Instruction opName="br" type="label" operands="while.body" />
+      </BasicBlock>
+      <BasicBlock name="while.body">
+        <Instruction des="result.07" opName="phi" type="i32" values="[add:while.body],[0:while.body.preheader]" />
+        <Instruction des="i.06" opName="phi" type="i32" values="[inc:while.body],[0:while.body.preheader]" />
+        <Instruction des="inc" opName="add" type="i32" operands="i.06,1" />
+        <Instruction des="arrayidx" opName="getelementptr" type="[10 x i32]" operands="[[10 x i32]*]data,[i32]0,[i32]i.06" />
+        <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="arrayidx" />
+        <Instruction des="add" opName="add" type="i32" operands="r-1,result.07" />
+        <Instruction des="cmp" opName="icmp_slt" type="i32" operands="add,r-0" />
+        <Instruction opName="br" operands="[i1]cmp, [label]while.body, [label]while.end.loopexit" />
+      </BasicBlock>
+      <BasicBlock name="while.end.loopexit">
+        <Instruction opName="br" type="label" operands="while.end" />
+      </BasicBlock>
+      <BasicBlock name="while.end">
+        <Instruction des="result.0.lcssa" opName="phi" type="i32" values="[0:entry],[add:while.end.loopexit]" />
+        <Instruction opName="ret" operands="[i32]result.0.lcssa" />
+      </BasicBlock>
+    </BasicBlocks>
+  </Function>
+</Module>

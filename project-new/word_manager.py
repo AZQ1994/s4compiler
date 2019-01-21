@@ -11,8 +11,10 @@ class WordManager(object):
 		self.temp = {}
 		self.function_args = {}
 		self.function_return = {}
-		stack = self.new_datawords("sys_stack", [0]*100, [])
+		stack = self.new_datawords("sys_stack", [0]*1000, [])
 		self.stack = {'pointer': stack, 'stack': stack.array[0]}
+		# pretransform pass
+		self.mem2reg_mapped = {}
 	def function_return_word(self, func_name):
 		res = self.new_dataword(func_name, 0)
 		self.function_return[func_name] = res
@@ -62,6 +64,8 @@ class WordManager(object):
 	def reg(self, word):
 		# called on creating a word object
 		self.book[word] = word
+	def unreg(self, word):
+		self.book.pop(word, None)
 
 	def add_namespace(self, namespace):
 		self.currentNamespace = namespace
@@ -79,11 +83,13 @@ class WordManager(object):
 		return self.namespace.add_word(Address("", "NEXT", self), namespace)
 
 	def get_const_ptr(self, num):
+		num = int(num)
 		if num in self.const:
 			return self.const[num].new_ptr()
 		else:
 			word = self.new_dataword("C_"+str(num), num)
 			self.const[num] = word
+			word.type = "data-const"
 			return word.new_ptr()
 
 	def get_word(self, name, namespace = None):

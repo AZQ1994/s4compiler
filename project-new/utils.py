@@ -110,7 +110,7 @@ from collections import defaultdict
 # handling address used before declared
 class AddressBeforeUsingHandler(object):
 	def __init__(self, WM):
-		self.address_dict = []
+		self.address_dict = {}
 		self.to_do_dict = defaultdict(list)
 		self.WM = WM
 	def attach(self, ins_node, name):

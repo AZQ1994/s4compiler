@@ -76,8 +76,8 @@ class BuildPass(Pass):
 						WM.new_datawords(V.get("name"), values)
 
 					elif V.get("type") == "i32":
-						WM.new_dataword(V.get("name"), V.get("init"))
-
+						w = WM.new_dataword(V.get("name"), V.get("init"))
+						WM.mem2reg_mapped[w] = w
 					else:
 						### 32bit integer only for now
 						print "ERROR!!! not done yet!"
@@ -110,49 +110,25 @@ class BuildPass(Pass):
 				append_node = append_node.append(
 					SystemNode([], "function {0}({1}):".format(function_name, ",".join([str(arg.name) for arg in args]))))
 				
-				""" 20181125 TODO
-
-				### get all phi node
-				for BB in item1[1]:
-					BB_name = BB.get("name")
-					phi = {} #{from:{var: from_var}}
-					for I in BB:
-						ins_name = I.get("opName")
-						if ins_name != "phi":
-							break
-						ins_des = I.get("des").replace(".","_")
-
-						op = I.get("values").replace(".","_")
-						
-						for op_string in op.split(","):
-							res = phi_op_pattern.match(op_string)
-							if phi.has_key(res.group(2)):
-								phi[res.group(2)][ins_des] = res.group(1)
-							else:
-								phi[res.group(2)] = {ins_des : res.group(1)}
-					
-					WM.phi[BB_name] = phi
-					### add bb graph node
-					# self.bb_graph[function_name].newNode(BB_name)
-				"""
-				### 20181125 maybe sequence should be set to have less brs
-
-				### set root
+				### create BBs
+				# BBs are created here, but still not connected to each other at this time
 				firstBB_name = next(iter(item1[1])).get("name")
-				# self.bb_graph[function_name].setRoot(self.bb_graph[function_name].getNode(firstBB_name))
 				BB_dict = {}
+				function_dict[function_name].bb_dict = BB_dict
 				for BB in item1[1]:
 					BB_name = BB.get("name")
 					bb = IRBasicBlock(BB_name, function_name)
 					BB_dict[BB_name] = bb
 					#append_node = append_node.append_block(bb.start)
 					self.debug_log("BB: {0}".format(BB_name))
-				
-				
 
+				
+				### get all phi nodes, and build
 				phi_vars = defaultdict(list)
+				pre_phi_instructions = {} # BB_name: ins
 				for BB in item1[1]:
 					BB_name = BB.get("name")
+					phi_info = defaultdict(list) # from: [[A, A'], [B, B']]
 					for I in BB:
 						ins_name = I.get("opName")
 						if ins_name != "phi":
@@ -163,7 +139,22 @@ class BuildPass(Pass):
 						for op_string in op.split(","):
 							res = phi_op_pattern.match(op_string)
 							phi_vars[WM.get_or_add_word(ins_des)].append(WM.get_or_add_word(res.group(1)))
+							phi_info[BB_dict[res.group(2)].start].append([WM.get_word(ins_des).new_ptr(), WM.get_word(res.group(1)).new_ptr()])
 
+					# build prephi node
+					if len(phi_info) != 0:
+						params = []
+						for addr in phi_info:
+							params.append([WM.new_address(None, addr)] + phi_info[addr])
+						ins = PrePhi(params, "prephi", BB_dict[BB_name])
+						# write param
+						i = 0
+						for addr in phi_info:
+							i += 1
+							for item in phi_info[addr]:
+								ins.set_write_param(i)
+								i+=2
+						pre_phi_instructions[BB_name] = ins
 				#print phi_vars
 
 				for BB in item1[1]:
@@ -176,36 +167,25 @@ class BuildPass(Pass):
 					BB_name = BB.get("name")
 					append_node = BB_dict[BB_name].start
 
-					# self.bb_graph[function_name].getNode(BB_name).setListNode(append_node)
-					
-					"""#print phi
-					for l,f_bb in WM.phi[BB_name].items():
-						#l = "phi_"+BB_name+"-"+l
-						for var, from_var in f_bb.items():
-							if check_int(var):
-								w_var = WM.const(var)
-							else:
-								w_var = WM.getName(var)
-							if check_int(from_var):
-								w_from_var = WM.const(from_var)
-							else:
-								w_from_var = WM.getName(from_var)
-							append_node = append_node.append(LM.new(ListNode(Instruction("load", [w_var, w_from_var]),l)))
-							l = None
-						append_node = append_node.append(LM.new(ListNode(Instruction("br", [WM.label(WM.getUpperNamespace()+BB.get("name").replace(".","_"))]),l)))
-					"""
+					checking_phi = True
 					for I in BB: # instruction
 						############### des + params TODO
 						ins_name = I.get("opName")
-						#if ins_name == "phi":
-						#	continue
+						if ins_name == "phi":
+							continue
+						if checking_phi and BB_name in pre_phi_instructions:
+							append_node = append_node.append(pre_phi_instructions[BB_name])
+						checking_phi = False
 						ins_params = [] if I.get("operands") == None else re.sub(r'\[.*?(\[.*?\])?.*?\]','', I.get("operands")).replace(" ","").split(",")##################TODO?????
 						ins_des = None if I.get("des") == None else I.get("des")
-						self.debug_log("- op: {0} {1}".format(ins_name, str(ins_params)))
+						#self.debug_log("- op: {0} {1}".format(ins_name, str(ins_params)))
 						if ins_name in build_methods:
-							ins = build_methods[ins_name](BB_name, ins_name, ins_des, ins_params, I, WM, BB_dict, function_dict)
-
+							self.debug_log(("BuildPass: Building {0} instruction (special build)").format(ins_name))
+							logs = []
+							ins = build_methods[ins_name](BB_name, ins_name, ins_des, ins_params, I, WM, BB_dict, function_dict, logs)
+							self.debug_logs(logs)
 						else:
+							self.debug_log(("BuildPass: Building {0} instruction (normal build)").format(ins_name))
 							params = []
 							for x in [ins_des]+ins_params if ins_des != None else ins_params:
 								if check_int(x):
@@ -228,6 +208,7 @@ class BuildPass(Pass):
 					BB_dict[firstBB_name].start.append(SystemNode([arg.new_ptr()],"arg").set_write_param(0))	#
 				WM.function_args[function_name] = args
 				WM.function_return_word(function_name)
+				
 				### check the BB is executed only once or is looped executed
 				to_be_checked = [BB_dict["entry"]]
 				checked = {}
@@ -250,7 +231,7 @@ class BuildPass(Pass):
 				
 				
 
-				#"""
+				"""
 				### combine variables
 				# 1. source
 				# - if source is a bb only to be executed once
@@ -343,15 +324,15 @@ class BuildPass(Pass):
 							if check_ins.prev != None:
 								need_check.append(check_ins.prev)
 					
-					#for s in source_list:
-					#	if s not in check:
-					#		print des, s
-					#		des.replace_by(s)
-					#		break
-					#	else:
-					#		print des, s, False
+					for s in source_list:
+						if s not in check:
+							print des, s
+							des.replace_by(s)
+							break
+						else:
+							print des, s, False
 
-
+				"""
 				
 
 
@@ -397,6 +378,55 @@ class BuildPass(Pass):
 						else:
 							break;
 				
+				#"""
+				# check for combination of the variable
+				convert_dict = {}
+				for des, source_list in phi_vars.items():
+					while des in convert_dict:
+						des = convert_dict[des]
+					des.calculate_interval()
+					print "////////////"
+					print des
+					for i in des.interval:
+						print des.interval[i],
+					print ""
+					for source in source_list:
+						while source in convert_dict:
+							source = convert_dict[source]
+						source.calculate_interval()
+						print "  ",source, len(source.used)
+						for i in source.interval:
+							print "  ",source.interval[i],
+						print ""
+						if len(source.interval) == 0:
+							continue
+						failed = False
+						# find source in interval of des
+						for ins in source.used:
+							if ins in des.interval:
+								if (des.interval[ins] == ")" and source.interval[ins] == "(") or (des.interval[ins] == "(" and source.interval[ins] == ")"):
+									pass
+								else:
+									print "failed: ", ins, des.interval[ins], source.interval[ins]
+									failed = True
+						if failed:
+							continue
+						for ins in des.used:
+							if ins in source.interval:
+								if (des.interval[ins] == ")" and source.interval[ins] == "(") or (des.interval[ins] == "(" and source.interval[ins] == ")"):
+									pass
+								else:
+									print "failed: ", ins, des.interval[ins], source.interval[ins]
+									failed = True
+						if failed:
+							continue
+						# succeeded then
+						convert_dict[des] = source
+						des.replace_by(source)
+						des = source
+						des.calculate_interval()
+				#"""
+
 
 				namespace.pop()
 				# end of function
@@ -409,7 +439,7 @@ class BuildPass(Pass):
 
 ### build methods
 #   methods for each ir instruction to build a instruction node
-def build_getelementptr(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict):
+def build_getelementptr(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, logs):
 	# [*1] https://llvm.org/docs/LangRef.html#getelementptr-instruction
 	# <result> = getelementptr <ty>, <ty>* <ptrval>{, [inrange] <ty> <idx>}*
 	# <result> = getelementptr inbounds <ty>, <ty>* <ptrval>{, [inrange] <ty> <idx>}*
@@ -447,7 +477,7 @@ def build_getelementptr(bb_name, ins_name, des, ins_params, I, WM, BB_dict, func
 # Every basic block in a program ends with a "Terminator" instruction, which indicates which block should be executed after the current block is finished. These terminator instructions typically yield a 'void' value: they produce control flow, not values (the one exception being the 'invoke' instruction).
 # The terminator instructions are: 'ret', 'br', 'switch', 'indirectbr', 'invoke', 'resume', 'catchswitch', 'catchret', 'cleanupret', and 'unreachable'.
 
-def build_br(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict):
+def build_br(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, logs):
 	# branch
 	# br i1 <cond>, label <iftrue>, label <iffalse>
 	# br label <dest>          ; Unconditional branch
@@ -509,7 +539,7 @@ def build_br(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict):
 	params[2].value.BB.from_bb.append(BB_dict[bb_name])
 	return IRInstructionNode(params, "br3", BB_dict[bb_name])
 
-def build_call(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict):
+def build_call(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, logs):
 	call_params = []
 	params = []
 
@@ -517,6 +547,9 @@ def build_call(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict
 	if des != None:
 		d = WM.get_or_add_word(des).new_ptr()
 		params.append(d)
+
+	# record the function is called
+	function_dict[BB_dict[bb_name].func_name].called.append(function_dict[ins_params[0]])
 
 	function = WM.new_address(None, function_dict[ins_params[0]].start)
 	params.append(function)
@@ -537,7 +570,7 @@ def build_call(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict
 
 	return node
 
-def build_ret(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict):
+def build_ret(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, logs):
 	if ins_params[0] == "void":
 		return IRReturn([], ins_name, BB_dict[bb_name])
 	elif len(ins_params) == 1:
@@ -550,7 +583,7 @@ def build_ret(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict)
 		# not gonna happen
 		raise Exception
 
-def build_phi(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict):
+def build_phi(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, logs):
 	op = I.get("values")
 	params = [WM.get_or_add_word(des)]
 	phi_op_pattern = re.compile("\[(.*?):(.*?)\]")
@@ -562,7 +595,15 @@ def build_phi(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict)
 	node.set_write_param(0)
 	return node
 
-#def build_alloca
+def build_alloca(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, logs):
+	des = WM.get_or_add_word(des)
+	if len(ins_params) != 0:
+		raise Exception
+	WM.mem2reg_mapped[des] = des
+	return SystemNode([],"nop")
+
+def build_prephi():
+	pass
 
 build_methods={
 	"phi": build_phi,
