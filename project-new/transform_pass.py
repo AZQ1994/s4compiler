@@ -310,6 +310,7 @@ def trans_load(IN, WM, logs):
 			P_CP(read.new_ptr(), IN.params[1]),
 			P_CP(IN.params[0], read)
 			])
+
 def trans_store(IN, WM, logs):
 	if IN.params[1].value in WM.mem2reg_mapped:
 		IN.replace_by(P_CP(IN.params[1], IN.params[0]))
@@ -319,6 +320,8 @@ def trans_store(IN, WM, logs):
 			P_CP(write.new_ptr(), IN.params[1]),
 			P_CP(write, IN.params[0])
 			])
+def trans_getelementptr2(IN, WM, logs):
+	IN.replace_by(P_ADD(IN.params[1], IN.params[2], IN.params[0]))
 
 transform_dict = {
 	"add": trans_add,
@@ -331,4 +334,5 @@ transform_dict = {
 	"gep_store": trans_gep_store,
 	"load": trans_load,
 	"store": trans_store,
+	"getelementptr2": trans_getelementptr2,
 }

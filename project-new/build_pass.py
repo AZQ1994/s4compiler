@@ -453,8 +453,19 @@ def build_getelementptr(bb_name, ins_name, des, ins_params, I, WM, BB_dict, func
 	# 2: index1 (0 at this time - https://llvm.org/docs/GetElementPtr.html#why-is-the-extra-0-index-required)
 	# 3: index2
 	if len(ins_params) != 3:
-		print "!!!!!!!!!!!!!!!!TODO!!!!!!!!"
-		raise Exception
+		#print "!!!!!!!!!!!!!!!!TODO!!!!!!!!"
+		params = []
+		params.append(WM.new_datapointerword(des, -1).new_ptr())
+		params.append(WM.get_word(ins_params[0]).new_ptr())
+			
+		if check_int(ins_params[1]):
+			params.append(WM.get_const_ptr(ins_params[1]))
+		else:
+			params.append(WM.get_or_add_word(ins_params[1]).new_ptr())
+		node = IRInstructionNode(params, "getelementptr2", BB_dict[bb_name])
+		node.set_write_param(0)
+		#raise Exception
+		return node
 	
 	params = []
 	params.append(WM.new_datapointerword(des, -1).new_ptr())
@@ -540,6 +551,16 @@ def build_br(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, 
 	return IRInstructionNode(params, "br3", BB_dict[bb_name])
 
 def build_call(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, logs):
+	"""
+	if ins_params[1] == "getelementptr(":
+		print I.get("operands")
+		m = re.match(r"(\S+?), (([\S\s]+?\([\S\s]+?\))(, ))+", I.get("operands"))
+		#ops = I.get("operands").split(',', 1)
+		#string = ops[1].replace("),", ") ; ")
+		#ope
+		print "*****", m.groups()
+		return
+	"""
 	call_params = []
 	params = []
 

@@ -123,8 +123,8 @@ def comb_icmp_br3(current):
 	c_n = current.next
 	if len(current.params[0].value.used) != 2:
 		raise Exception
-	if current.instrStr == "icmp_slt":
-		new = IRIcmpBr3([current.params[1], current.params[2], c_n.params[1], current.next.params[2]], current.instrStr + "_br3", current.BB)
+	if current.instrStr == "icmp_slt" or current.instrStr == "icmp_ult": # bypass
+		new = IRIcmpBr3([current.params[1], current.params[2], c_n.params[1], current.next.params[2]], "icmp_slt_br3", current.BB)
 	elif current.instrStr == "icmp_sgt":
 		new = IRIcmpBr3([current.params[2], current.params[1], c_n.params[1], current.next.params[2]], "icmp_slt_br3", current.BB)
 	current.params[0].manager.unreg(current.params[0])
@@ -185,6 +185,12 @@ def icmp_x_br3(current):
 
 combination_dict = {
 	"icmp_slt" : {
+		"br3" : comb_icmp_br3,
+		"*" : {
+			"br3": icmp_x_br3,
+		}
+	},
+	"icmp_ult" : {
 		"br3" : comb_icmp_br3,
 		"*" : {
 			"br3": icmp_x_br3,
