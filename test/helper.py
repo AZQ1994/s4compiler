@@ -24,13 +24,13 @@ print commands.getoutput("clang --target=ppc32 -c -emit-llvm -O2 -o %s.o2.bc %s 
 
 o2xml = commands.getoutput("%s/../../output %s.bc"%(path,filename))
 o0xml = commands.getoutput("%s/../../output %s.o0.bc"%(path,filename))
-o3xml = commands.getoutput("%s/../../output %s.o3.bc"%(path,filename))
+o3xml = commands.getoutput("%s/../../output %s.o2.bc"%(path,filename))
 
 #f2 = open("%s.parse"%filename,"w")
 #f0 = open("%s.o0.parse"%filename,"w")
 f2xml = open("%s.xml"%filename,"w")
 f0xml = open("%s.o0.xml"%filename,"w")
-f3xml = open("%s.o3.xml"%filename,"w")
+f3xml = open("%s.o2.xml"%filename,"w")
 #print o2xml
 #f2.write(o2)
 #f2.close()
