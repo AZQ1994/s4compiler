@@ -1,6 +1,6 @@
 <Module>
-  <!-- ; ModuleID = 'test/test_code_quick_new/main.bc' -->
-  <!-- source_filename = " test/test_code_quick_new/main.c  "-->
+  <!-- ; ModuleID = 'main3.bc' -->
+  <!-- source_filename = " main3.c  "-->
   <!-- target datalayout = "E-m:e-p:32:32-i64:64-n32" -->
   <!-- target triple = "ppc32" -->
   <Globals>
@@ -15,31 +15,29 @@
     </Arguments>
     <BasicBlocks>
       <BasicBlock name="entry">
-        <Instruction des="cmp44" opName="icmp_slt" type="i32" operands="left,right" />
-        <Instruction opName="br" operands="[i1]cmp44, [label]if.end.preheader, [label]return" />
+        <Instruction des="cmp40" opName="icmp_slt" type="i32" operands="left,right" />
+        <Instruction opName="br" operands="[i1]cmp40, [label]if.end.preheader, [label]return" />
       </BasicBlock>
       <BasicBlock name="if.end.preheader">
         <Instruction opName="br" type="label" operands="if.end" />
       </BasicBlock>
       <BasicBlock name="if.end">
-        <Instruction des="left.tr45" opName="phi" type="i32" values="[add:while.end19],[left:if.end.preheader]" />
-        <Instruction des="arrayidx" opName="getelementptr" type="[20000 x i32]" operands="[[20000 x i32]*]data,[i32]0,[i32]left.tr45" />
+        <Instruction des="left.tr41" opName="phi" type="i32" values="[add:while.end16],[left:if.end.preheader]" />
+        <Instruction des="arrayidx" opName="getelementptr" type="[20000 x i32]" operands="[[20000 x i32]*]data,[i32]0,[i32]left.tr41" />
         <Instruction des="r-0" opName="load" loadType="i32" type="i32*" operands="arrayidx" />
         <Instruction opName="br" type="label" operands="while.cond" />
       </BasicBlock>
       <BasicBlock name="while.cond">
-        <Instruction des="l_cursor.0" opName="phi" type="i32" values="[left.tr45:if.end],[inc:if.end12]" />
         <Instruction des="r_cursor.0" opName="phi" type="i32" values="[right:if.end],[dec:if.end12]" />
+        <Instruction des="l_cursor.0" opName="phi" type="i32" values="[left.tr41:if.end],[inc:if.end12]" />
         <Instruction opName="br" type="label" operands="while.cond1" />
       </BasicBlock>
       <BasicBlock name="while.cond1">
         <Instruction des="l_cursor.1" opName="phi" type="i32" values="[l_cursor.0:while.cond],[inc:while.cond1]" />
+        <Instruction des="inc" opName="add" type="i32" operands="l_cursor.1,1" />
         <Instruction des="arrayidx2" opName="getelementptr" type="[20000 x i32]" operands="[[20000 x i32]*]data,[i32]0,[i32]l_cursor.1" />
         <Instruction des="r-1" opName="load" loadType="i32" type="i32*" operands="arrayidx2" />
-        
-        <Instruction des="inc" opName="add" type="i32" operands="l_cursor.1,1" />
         <Instruction des="cmp3" opName="icmp_slt" type="i32" operands="r-1,r-0" />
-
         <Instruction opName="br" operands="[i1]cmp3, [label]while.cond1, [label]while.cond5.preheader" />
       </BasicBlock>
       <BasicBlock name="while.cond5.preheader">
@@ -49,23 +47,21 @@
         <Instruction des="r_cursor.1" opName="phi" type="i32" values="[dec:while.cond5],[r_cursor.0:while.cond5.preheader]" />
         <Instruction des="arrayidx6" opName="getelementptr" type="[20000 x i32]" operands="[[20000 x i32]*]data,[i32]0,[i32]r_cursor.1" />
         <Instruction des="r-2" opName="load" loadType="i32" type="i32*" operands="arrayidx6" />
-        
-        <Instruction des="dec" opName="add" type="i32" operands="r_cursor.1,-1" />
         <Instruction des="cmp7" opName="icmp_sgt" type="i32" operands="r-2,r-0" />
+        <Instruction des="dec" opName="add" type="i32" operands="r_cursor.1,-1" />
         <Instruction opName="br" operands="[i1]cmp7, [label]while.cond5, [label]while.end9" />
       </BasicBlock>
       <BasicBlock name="while.end9">
         <Instruction des="cmp10" opName="icmp_slt" type="i32" operands="l_cursor.1,r_cursor.1" />
-        <Instruction opName="br" operands="[i1]cmp10, [label]if.end12, [label]while.end19" />
+        <Instruction opName="br" operands="[i1]cmp10, [label]if.end12, [label]while.end16" />
       </BasicBlock>
       <BasicBlock name="if.end12">
         <Instruction opName="store" operands="[i32]r-2,[i32*]arrayidx2" />
         <Instruction opName="store" operands="[i32]r-1,[i32*]arrayidx6" />
         <Instruction opName="br" type="label" operands="while.cond" />
       </BasicBlock>
-      <BasicBlock name="while.end19">
-        <Instruction des="sub" opName="add" type="i32" operands="l_cursor.1,-1" />
-        <Instruction des="call" opName="call" functionType="i32" operands="quick, [i32]left.tr45, [i32]sub" />
+      <BasicBlock name="while.end16">
+        <Instruction des="call" opName="call" functionType="i32" operands="quick, [i32]left.tr41, [i32]l_cursor.1" />
         <Instruction des="add" opName="add" type="i32" operands="r_cursor.1,1" />
         <Instruction des="cmp" opName="icmp_slt" type="i32" operands="add,right" />
         <Instruction opName="br" operands="[i1]cmp, [label]if.end, [label]return.loopexit" />
