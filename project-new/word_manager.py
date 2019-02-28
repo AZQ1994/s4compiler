@@ -15,6 +15,7 @@ class WordManager(object):
 		self.stack = {'pointer': stack, 'stack': stack.array[0]}
 		# pretransform pass
 		self.mem2reg_mapped = {}
+		self.opposite = {} # opposite of a word, for addition
 	def function_return_word(self, func_name):
 		res = self.new_dataword(func_name, 0)
 		self.function_return[func_name] = res

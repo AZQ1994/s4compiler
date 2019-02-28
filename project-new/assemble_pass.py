@@ -35,5 +35,7 @@ class AssemblePass(Pass):
 					check = True
 				self.debug_logs(logs)
 				current = c_n
-
+		# opposite
+		for word in WM.opposite:
+			self.startNode.append(P_SUB(word.new_ptr(), WM.get_const_ptr(0), word.opposite.new_ptr())).rep()
 		self.print_asm()

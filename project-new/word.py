@@ -20,6 +20,8 @@ class Word(object):
 
 		self.interval = {}
 
+		self.opposite = None
+
 	def new_ptr(self, name = None):
 		ptr = self.manager.new_pointerword(name, self)
 		self.pointers[ptr] = ptr

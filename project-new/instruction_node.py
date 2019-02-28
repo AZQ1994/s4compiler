@@ -326,13 +326,11 @@ class P_ADD(PseudoInstructionNode):
 			print self
 			_next = _WM.get_NEXT()
 			c_m = _WM.get_const_ptr(0-self.params[0].value.value)
-			print c_m
 			rep = Subneg4InstructionNode(c_m, self.params[1], self.params[2], _next)
 			self.replace_by(rep)
-			print rep
 			_WM.unreg(self.params[0])
 			return
-		"""
+
 		if self.params[1].value.type == "data-const":
 			print self
 			_next = _WM.get_NEXT()
@@ -340,7 +338,27 @@ class P_ADD(PseudoInstructionNode):
 			self.replace_by(Subneg4InstructionNode(c_m, self.params[0], self.params[2], _next))
 			_WM.unreg(self.params[1])
 			return
-		"""
+
+		if self.params[0].value.opposite == None:
+			self.params[0].value.calculate_interval()
+			if len(self.params[0].value.interval) == 0:
+				self.params[0].value.opposite = _WM.new_dataword(None, 0)
+				_WM.opposite[self.params[0].value] = self.params[0].value.opposite
+		if self.params[0].value.opposite != None:
+			self.replace_by(Subneg4InstructionNode(self.params[0].value.opposite.new_ptr(), self.params[1], self.params[2], _WM.get_NEXT(), self.comment))
+			_WM.unreg(self.params[0])
+			return
+
+		if self.params[1].value.opposite == None:
+			self.params[1].value.calculate_interval()
+			if len(self.params[1].value.interval) == 0:
+				self.params[1].value.opposite = new_dataword(None, 0)
+				_WM.opposite[self.params[1].value] = self.params[1].value.opposite
+		if self.params[1].value.opposite != None:
+			self.replace_by(Subneg4InstructionNode(self.params[1].value.opposite.new_ptr(), self.params[0], self.params[2], _WM.get_NEXT(), self.comment))
+			_WM.unreg(self.params[1])
+			return
+
 		_next1 = _WM.get_NEXT()
 		_next2 = _WM.get_NEXT()
 		temp_p1 = _WM.get_temp_ptr()
