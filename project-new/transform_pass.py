@@ -63,14 +63,36 @@ def trans_br1(IN, WM, logs):
 def trans_load(IN, WM, logs):
 	#logs.append(("load"))
 	c_0 = WM.get_const_ptr()
-
+def trans_icmp_sub_br3(IN, WM, logs):
+	IN.params.append([])
+	IN.params.append([])
+	return trans_icmp_sub_br3_phi(IN, WM, logs)
 def trans_icmp_sub_br3_phi(IN, WM, logs):
-	# A < B : L1, else: L2
-	# => A-B < 0: L1, else: L2
-	# Subneg4InstructionNode(B, A, temp, L1)
-	# L2: 
-	pass
-	# slt: A, B, L1, L2
+	h = AddressBeforeUsingHandler(WM)
+	p1 = IN.params[0]
+	p2 = IN.params[1]
+	L1 = IN.params[2]
+	L2 = IN.params[3]
+	L1_cp = []
+	L2_cp = []
+	for l in IN.params[4]:
+		L1_cp.append(P_CP(l[0], l[1]))
+	for l in IN.params[5]:
+		L2_cp.append(P_CP(l[0], l[1]))
+	LNs = [
+			Subneg4InstructionNode(p2, p1, WM.get_temp_ptr(), h.use("L1") if len(L1_cp) != 0 else L1),
+			# L2
+		] + L2_cp + [
+			P_GOTO(L2),
+		] + (([
+			# L1
+			h.attach(
+				SystemNode([],"label"),
+				"L1"
+			),
+		] + L1_cp + [P_GOTO(L1)] )if len(L1_cp) != 0 else [] )
+	h.solve()
+	IN.replace_by_INs(LNs)
 
 def trans_icmp_br3_phi(IN, WM, logs):
 	if IN.instrStr != "icmp_slt_br3_phi":
@@ -336,8 +358,8 @@ transform_dict = {
 	"sub": trans_sub,
 	#"add": trans_sub,
 	"br": trans_br1,
-	"icmp_slt_br3_phi": trans_icmp_br3_phi,
-	"icmp_slt_br3": trans_icmp_br3,
+	"icmp_slt_br3_phi": trans_icmp_sub_br3_phi, #trans_icmp_br3_phi,
+	"icmp_slt_br3": trans_icmp_sub_br3, #trans_icmp_br3,
 	"gep_load": trans_gep_load,
 	"gep_store": trans_gep_store,
 	"load": trans_load,
