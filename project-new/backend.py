@@ -47,8 +47,8 @@ class Backend(object):
 #b = Backend("../test/test_code_05/array.xml")
 #b = Backend("../test/test_code_quick/mips-quick-test.xml")
 #b = Backend("../test/test_code_quick/mips-quick.xml")
-#b = Backend("../test/test_code_quick_new/main.xml")
-b = Backend("../test/test_code_quick_new/main2.xml")
+b = Backend("../test/test_code_quick_new/main.xml")
+#b = Backend("../test/test_code_quick_new/main2.xml")
 #b = Backend("../test/test_code_loop/main.xml")
 b.build_pass()
 

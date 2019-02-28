@@ -32,7 +32,7 @@ class Word(object):
 		self.used.pop(IN, None)
 
 	def replace_by(self, word):
-		print "replacing:", self, "->", word
+		#print "replacing:", self, "->", word
 		for IN, indexs in self.used.items():
 			#print "$ set param ", IN, indexs
 			#print "word original", word.used[IN]
@@ -51,7 +51,7 @@ class Word(object):
 						else:
 							raise Exception
 							break
-					#p.value.no_longer_used_in(IN)
+					p.value.no_longer_used_in(IN)
 					p.value = word
 					word.used_in(IN, index)
 					print word.used[IN]

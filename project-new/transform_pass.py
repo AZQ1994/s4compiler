@@ -64,6 +64,14 @@ def trans_load(IN, WM, logs):
 	#logs.append(("load"))
 	c_0 = WM.get_const_ptr()
 
+def trans_icmp_sub_br3_phi(IN, WM, logs):
+	# A < B : L1, else: L2
+	# => A-B < 0: L1, else: L2
+	# Subneg4InstructionNode(B, A, temp, L1)
+	# L2: 
+	pass
+	# slt: A, B, L1, L2
+
 def trans_icmp_br3_phi(IN, WM, logs):
 	if IN.instrStr != "icmp_slt_br3_phi":
 		raise Exception

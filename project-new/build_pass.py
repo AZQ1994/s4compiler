@@ -404,7 +404,10 @@ class BuildPass(Pass):
 						# find source in interval of des
 						for ins in source.used:
 							if ins in des.interval:
-								if (des.interval[ins] == ")" and source.interval[ins] == "(") or (des.interval[ins] == "(" and source.interval[ins] == ")"):
+								if \
+									des.interval[ins] != "-" and source.interval[ins] != "-":
+									#	(des.interval[ins] == ")" and source.interval[ins] == "(") or \
+									#	(des.interval[ins] == "(" and source.interval[ins] == ")"):
 									pass
 								else:
 									print "failed: ", ins, des.interval[ins], source.interval[ins]
@@ -413,7 +416,9 @@ class BuildPass(Pass):
 							continue
 						for ins in des.used:
 							if ins in source.interval:
-								if (des.interval[ins] == ")" and source.interval[ins] == "(") or (des.interval[ins] == "(" and source.interval[ins] == ")"):
+								if \
+									des.interval[ins] != "-" and source.interval[ins] != "-":
+									#(des.interval[ins] == ")" and source.interval[ins] == "(") or (des.interval[ins] == "(" and source.interval[ins] == ")"):
 									pass
 								else:
 									print "failed: ", ins, des.interval[ins], source.interval[ins]

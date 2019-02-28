@@ -259,7 +259,7 @@ def trans_call(IN, WM, logs):
 	
 	for var in WM.book:
 		if isinstance(var, DataWord):
-			if IN in var.interval and IN.next in var.interval:
+			if IN in var.interval and var.interval[IN] == "-":
 				need_save.append(var)
 				logs.append(("need_save: "+str(var),4))
 	first_node = SystemNode([],"call")
