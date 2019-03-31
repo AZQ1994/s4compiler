@@ -22,12 +22,13 @@ You can use helper.py in __test/__ to do this
 ```
 $ test/helper.py test/test_code_your_code/your.c
 ```
-2. set the xml file in main.py
+2. set the xml file in backend.py (or main.py, delete the code below of backend.py)
 ```
-backend = Backend("test/test_code_your_code/your.xml")
+backend = Backend("../test/test_code_your_code/your.xml")
 ```
-3. Run python main.py
+3. Run python backend.py
 ```
+$ cd project-new/
 $ python main.py > test/test_code_your_code/your.subneg4
 ```
 4. Run assembler
