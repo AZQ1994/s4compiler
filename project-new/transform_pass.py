@@ -63,6 +63,37 @@ def trans_br1(IN, WM, logs):
 def trans_load(IN, WM, logs):
 	#logs.append(("load"))
 	c_0 = WM.get_const_ptr()
+def trans_icmp_eq_br3(IN, WM, logs):
+	IN.params.append([])
+	IN.params.append([])
+	return trans_icmp_eq_br3_phi(IN, WM, logs)
+def trans_icmp_eq_br3_phi(IN, WM, logs):
+	h = AddressBeforeUsingHandler(WM)
+	p1 = IN.params[0]
+	p2 = IN.params[1]
+	L1 = IN.params[2]
+	L2 = IN.params[3]
+	L1_cp = []
+	L2_cp = []
+	for l in IN.params[4]:
+		L1_cp.append(P_CP(l[0], l[1]))
+	for l in IN.params[5]:
+		L2_cp.append(P_CP(l[0], l[1]))
+	LNs = [
+			Subneg4InstructionNode(p2, p1, WM.get_temp_ptr(), h.use("L2") if len(L2_cp) != 0 else L2),
+			Subneg4InstructionNode(p1, p2, WM.get_temp_ptr(), h.use("L2") if len(L2_cp) != 0 else L2),
+			# L1
+		] + L1_cp + [
+			P_GOTO(L1),
+		] + (([
+			# L2
+			h.attach(
+				SystemNode([],"label"),
+				"L2"
+			),
+		] + L2_cp + [P_GOTO(L2)] )if len(L2_cp) != 0 else [] )
+	h.solve()
+	IN.replace_by_INs(LNs)
 def trans_icmp_sub_br3(IN, WM, logs):
 	IN.params.append([])
 	IN.params.append([])
@@ -353,6 +384,33 @@ def trans_store(IN, WM, logs):
 def trans_getelementptr2(IN, WM, logs):
 	IN.replace_by(P_ADD(IN.params[1], IN.params[2], IN.params[0]))
 
+def trans_icmp_sub_select(IN, WM, logs):
+	# if p01 < p02: des = p11, else des = p12
+	# icmp_slt_select: des, p01, p02, p11, p12
+	# 
+	# p02, p01, temp, L11
+	# 0, p12, des
+	# goto next_inst
+	# L11:
+	# 0, p11, des
+	h = AddressBeforeUsingHandler(WM)
+	des = IN.params[0]
+	p01 = IN.params[1]
+	p02 = IN.params[2]
+	p11 = IN.params[3]
+	p12 = IN.params[4]
+	
+	LNs = [
+			Subneg4InstructionNode(p02, p01, WM.get_temp_ptr(), h.use("L11")),
+			P_CP(des, p12),
+			P_GOTO(h.use("fin")),
+			h.attach(SystemNode([], "label"),"L11"),
+			P_CP(des, p11),
+			h.attach(SystemNode([], "label"),"fin"),
+			]
+	h.solve()
+	IN.replace_by_INs(LNs)
+
 transform_dict = {
 	"add": trans_add,
 	"sub": trans_sub,
@@ -360,6 +418,9 @@ transform_dict = {
 	"br": trans_br1,
 	"icmp_slt_br3_phi": trans_icmp_sub_br3_phi, #trans_icmp_br3_phi,
 	"icmp_slt_br3": trans_icmp_sub_br3, #trans_icmp_br3,
+	"icmp_eq_br3_phi": trans_icmp_eq_br3_phi,
+	"icmp_eq_br3": trans_icmp_eq_br3,
+	"icmp_slt_select": trans_icmp_sub_select,
 	"gep_load": trans_gep_load,
 	"gep_store": trans_gep_store,
 	"load": trans_load,

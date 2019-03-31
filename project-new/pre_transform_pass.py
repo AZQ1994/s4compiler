@@ -127,6 +127,10 @@ def comb_icmp_br3(current):
 		new = IRIcmpBr3([current.params[1], current.params[2], c_n.params[1], current.next.params[2]], "icmp_slt_br3", current.BB)
 	elif current.instrStr == "icmp_sgt":
 		new = IRIcmpBr3([current.params[2], current.params[1], c_n.params[1], current.next.params[2]], "icmp_slt_br3", current.BB)
+	elif current.instrStr == "icmp_sle":
+		new = IRIcmpBr3([current.params[2], current.params[1], current.next.params[2], c_n.params[1]], "icmp_slt_br3", current.BB)
+	elif current.instrStr == "icmp_eq":
+		new = IRIcmpBr3([current.params[1], current.params[2], c_n.params[1], current.next.params[2]], "icmp_eq_br3", current.BB)
 	current.params[0].manager.unreg(current.params[0])
 	c_n.params[0].manager.unreg(c_n.params[0])
 	c_n.append(new)
@@ -183,8 +187,40 @@ def icmp_x_br3(current):
 	i1.set_next(i3)
 	return i2
 
+# need to check if they are same variable!!!!!!
+def comb_icmp_slt_select(current):
+	i1 = current # icmp   cmp, p01, p02 
+	i2 = i1.next # select des, cmp, p11, p12
+	# if p01 < p02: des = p11, else des = p12
+	# icmp_slt_select: des, p01, p02, p11, p12
+	# 
+	# p02, p01, temp, L11
+	# 0, p12, des
+	# goto next_inst
+	# L11:
+	# 0, p11, des
+	p01 = i1.params[1]
+	p02 = i1.params[2]
+	des = i2.params[0]
+	p11 = i2.params[2]
+	p12 = i2.params[3]
+	i1.params[0].manager.unreg(i1.params[0])
+	i2.params[1].manager.unreg(i2.params[1])
+	label = SystemNode([], "label")
+	i2.append(IRInstructionNode([des, p01, p02, p11, p12], "icmp_slt_select", i1.BB))
+	i1.remove()
+	i2.remove()
+
+
 combination_dict = {
 	"icmp_slt" : {
+		"br3" : comb_icmp_br3,
+		"select" : comb_icmp_slt_select,
+		"*" : {
+			"br3": icmp_x_br3,
+		}
+	},
+	"icmp_sle" : {
 		"br3" : comb_icmp_br3,
 		"*" : {
 			"br3": icmp_x_br3,
@@ -197,6 +233,12 @@ combination_dict = {
 		}
 	},
 	"icmp_sgt" : {
+		"br3" : comb_icmp_br3,
+		"*" : {
+			"br3": icmp_x_br3,
+		}
+	},
+	"icmp_eq" : {
 		"br3" : comb_icmp_br3,
 		"*" : {
 			"br3": icmp_x_br3,

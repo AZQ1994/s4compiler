@@ -119,7 +119,7 @@ class BuildPass(Pass):
 					BB_name = BB.get("name")
 					bb = IRBasicBlock(BB_name, function_name)
 					BB_dict[BB_name] = bb
-					#append_node = append_node.append_block(bb.start)
+					append_node = append_node.append_block(bb.start)
 					self.debug_log("BB: {0}".format(BB_name))
 
 				
@@ -335,9 +335,9 @@ class BuildPass(Pass):
 				"""
 				
 
-
+				"""
 				### TEST
-				temp = [[],[],[],[],[],[]]
+				temp = [[],[],[],[],[],[],[],[],[]]
 				for key, item in BB_dict.items():
 					temp[len(item.to_bb)].append(item)
 				for k, x in enumerate(temp):
@@ -377,7 +377,43 @@ class BuildPass(Pass):
 							current = items[0]
 						else:
 							break;
+				"""
+				# new method for connecting nodes # TODO!!!!!
+				"""
+				import heapq
+
+				finished_bb = {}
+				to_bb = defaultdict(list) # bb's available to_bbs (in queue)
+				finished_path = {} # {(from, to): true }
+				for key, BB in BB_dict.items():
+					finished_bb[BB] = False
+					for to in BB.to_bb:
+						heapq.push(to_bb[BB], (len(to.from_bb), to))
 				
+				current_ins = function_dict[function_name].end.prev
+				start = BB_dict["entry"]
+				available_next_bb = []
+				for BB in start.to_bb:
+					if finished_bb[BB] == False:
+						heapq.push(available_next_bb, ())
+				# here we get the to, or if 
+				
+
+
+
+				while True:
+					available_BBs_q = []
+					for BB in finished_bb:
+						if finished_bb[BB] == False:
+							heapq.push(available_BBs_q, (len(BB.to_bb), BB))
+					if len(available_BBs_q) == 0:
+						break
+					start = available_BBs_q[0]
+
+					break 
+				import sys
+				sys.exit()
+				"""
 				#"""
 				# check for combination of the variable
 				convert_dict = {}
