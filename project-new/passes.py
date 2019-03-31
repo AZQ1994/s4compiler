@@ -1,6 +1,11 @@
+from __future__ import print_function
+
 from log import Log
 from utils import terminal_info
 from compiler.ast import flatten
+
+
+import sys
 
 import traceback
 
@@ -44,24 +49,24 @@ class Pass(object):
 		raise NotImplementedError
 
 	def execute(self):
-		print terminal_info("=== " + self.pass_name +" start ===")
-		print "> " + self.description
+		print(terminal_info("=== " + self.pass_name +" start ==="), file=sys.stderr)
+		print("> " + self.description, file=sys.stderr)
 		try:
 			self.do()
 		except Exception as e:
 			traceback.print_exc()
-			print terminal_info(">>> debug_info >>>")
-			print self.debug_critical_log_output()
-			print terminal_info(">>> debug_info end >>>")
+			print (terminal_info(">>> debug_info >>>"), file=sys.stderr)
+			print (self.debug_critical_log_output(), file=sys.stderr)
+			print (terminal_info(">>> debug_info end >>>"), file=sys.stderr)
 	def debug_execute(self):
 		try:
 			self.do()
 		except Exception as e:
 			traceback.print_exc()
 		finally:
-			print terminal_info("=== debug_info ===")
-			print self.debug_log_output()
-			print terminal_info("=== debug_info end ===")
+			print (terminal_info("=== debug_info ==="), file=sys.stderr)
+			print (self.debug_log_output(), file=sys.stderr)
+			print (terminal_info("=== debug_info end ==="), file=sys.stderr)
 
 	def printIN(self):
 		WM = self.WM
@@ -74,9 +79,9 @@ class Pass(object):
 				if p in book:
 					book.pop(p)
 				else:
-					print "Warning: word not found in book"
-					print p
-					print current
+					print ("Warning: word not found in book", file=sys.stderr)
+					print (p, file=sys.stderr)
+					print (current, file=sys.stderr)
 			self.debug_log( current, 2 )
 			current = current.next
 
@@ -93,9 +98,9 @@ class Pass(object):
 			for p in flatten(current.params):
 				book.pop(p, None)
 			#self.debug_log( current.to_asm(), 2 )
-			print current.to_asm()
+			print (current.to_asm())
 			current = current.next
 
 		for item in book.values():
 			#self.debug_log( item.to_asm(), 2 )
-			print item.to_asm()
+			print (item.to_asm())

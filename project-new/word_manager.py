@@ -70,7 +70,7 @@ class WordManager(object):
 
 	def add_namespace(self, namespace):
 		self.currentNamespace = namespace
-		print "ns",self.currentNamespace
+		#print "ns",self.currentNamespace
 		self.namespace.add_namespace(namespace)
 
 	def get_HALT(self, namespace = None): ### TODO

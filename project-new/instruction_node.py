@@ -323,7 +323,7 @@ class P_ADD(PseudoInstructionNode):
 		_WM = self.params[0].manager
 		
 		if self.params[0].value.type == "data-const":
-			print self
+			#print self
 			_next = _WM.get_NEXT()
 			c_m = _WM.get_const_ptr(0-self.params[0].value.value)
 			rep = Subneg4InstructionNode(c_m, self.params[1], self.params[2], _next)
@@ -332,7 +332,7 @@ class P_ADD(PseudoInstructionNode):
 			return
 
 		if self.params[1].value.type == "data-const":
-			print self
+			#print self
 			_next = _WM.get_NEXT()
 			c_m = _WM.get_const_ptr(0-self.params[1].value.value)
 			self.replace_by(Subneg4InstructionNode(c_m, self.params[0], self.params[2], _next))

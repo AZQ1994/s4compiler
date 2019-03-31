@@ -421,19 +421,19 @@ class BuildPass(Pass):
 					while des in convert_dict:
 						des = convert_dict[des]
 					des.calculate_interval()
-					print "////////////"
-					print des
-					for i in des.interval:
-						print des.interval[i],
-					print ""
+					#print "////////////"
+					#print des
+					#for i in des.interval:
+					#	print des.interval[i],
+					#print ""
 					for source in source_list:
 						while source in convert_dict:
 							source = convert_dict[source]
 						source.calculate_interval()
-						print "  ",source, len(source.used)
-						for i in source.interval:
-							print "  ",source.interval[i],
-						print ""
+						#print "  ",source, len(source.used)
+						#for i in source.interval:
+						#	print "  ",source.interval[i],
+						#print ""
 						if len(source.interval) == 0:
 							continue
 						failed = False
@@ -446,7 +446,7 @@ class BuildPass(Pass):
 									#	(des.interval[ins] == "(" and source.interval[ins] == ")"):
 									pass
 								else:
-									print "failed: ", ins, des.interval[ins], source.interval[ins]
+									#print "failed: ", ins, des.interval[ins], source.interval[ins]
 									failed = True
 						if failed:
 							continue
@@ -457,7 +457,7 @@ class BuildPass(Pass):
 									#(des.interval[ins] == ")" and source.interval[ins] == "(") or (des.interval[ins] == "(" and source.interval[ins] == ")"):
 									pass
 								else:
-									print "failed: ", ins, des.interval[ins], source.interval[ins]
+									#print "failed: ", ins, des.interval[ins], source.interval[ins]
 									failed = True
 						if failed:
 							continue
@@ -536,7 +536,7 @@ def build_br(bb_name, ins_name, des, ins_params, I, WM, BB_dict, function_dict, 
 
 	# need to consider phi nodes
 	#
-	print ins_params
+	#print ins_params
 	params = []
 	if len(ins_params)==1:
 		#print ins_params[0], BB_name, WM.phi#!!!!!!!!

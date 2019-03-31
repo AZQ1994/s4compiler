@@ -56,7 +56,7 @@ class Word(object):
 					p.value.no_longer_used_in(IN)
 					p.value = word
 					word.used_in(IN, index)
-					print word.used[IN]
+					#print word.used[IN]
 			
 	def calculate_interval(self):
 

@@ -162,7 +162,7 @@ def gep_store(current):
 	i2 = current.next
 	# gep addr, array, 0, i
 	# store data, addr
-	print i1.params[0], i2.params[1]
+	#print i1.params[0], i2.params[1]
 	if i1.params[0].value != i2.params[1].value:
 		return
 	#params: data, addr, array, i
