@@ -17,7 +17,7 @@ module S4C
 
     def initialize(memory)
       @mem = memory
-      @instructions = []  # mixed: Subneg4, :label, :data, :comment
+      @instructions = []
     end
 
     def expand(pseudo_ops)
@@ -35,6 +35,8 @@ module S4C
       when PGoto then expand_goto(op)
       when PNeg  then expand_neg(op)
       when PHalt then expand_halt(op)
+      when PCallSetReturn then expand_call_set_return(op)
+      when PReturnJump    then expand_return_jump(op)
       when PLabel
         @instructions << [:label, op.name, op.comment]
       when PData
@@ -44,14 +46,10 @@ module S4C
       end
     end
 
-    # P_SUB(a, b, c): c = b - a → SUBNEG4: a b c NEXT
     def expand_sub(op)
       @instructions << Subneg4.new(op.a, op.b, op.c, 'NEXT', op.comment)
     end
 
-    # P_ADD(a, b, c): c = b + a
-    # → temp = 0 - a = -a      (SUBNEG4: a ZERO temp NEXT)
-    # → c = b - (-a) = b + a   (SUBNEG4: temp b c NEXT)
     def expand_add(op)
       t = @mem.temp
       z = @mem.zero
@@ -59,14 +57,11 @@ module S4C
       @instructions << Subneg4.new(t, op.b, op.c, 'NEXT', "#{op.comment} (add)")
     end
 
-    # P_CP(dst, src): dst = src → SUBNEG4: ZERO src dst NEXT (dst = src - 0)
     def expand_cp(op)
       z = @mem.zero
       @instructions << Subneg4.new(z, op.src, op.dst, 'NEXT', op.comment)
     end
 
-    # P_GOTO(label): unconditional jump
-    # → SUBNEG4: ZERO C_n1 temp label  (temp = -1 - 0 = -1, always < 0 → branch)
     def expand_goto(op)
       z = @mem.zero
       c_n1 = @mem.const(-1)
@@ -74,17 +69,40 @@ module S4C
       @instructions << Subneg4.new(z, c_n1, t, op.label, op.comment)
     end
 
-    # P_NEG(val, label): branch if val < 0
-    # → SUBNEG4: ZERO val temp label  (temp = val - 0 = val, branch if < 0)
     def expand_neg(op)
       z = @mem.zero
       t = @mem.temp
       @instructions << Subneg4.new(z, op.val, t, op.label, op.comment)
     end
 
-    # HALT: jump to HALT
     def expand_halt(_op)
       @instructions << Subneg4.new(@mem.zero, @mem.zero, @mem.zero, 'HALT', "halt")
+    end
+
+    # PReturnJump(d_label):
+    # Emit a goto with a per-operand label on the D operand.
+    # The D value starts as 0 (will be overwritten by caller).
+    # Output: cd:D_LABEL: ZERO, C_n1, temp, 0
+    def expand_return_jump(op)
+      z = @mem.zero
+      c_n1 = @mem.const(-1)
+      t = @mem.temp
+      # Special instruction with per-operand label on D
+      @instructions << [:return_jump, z, c_n1, t, op.d_label, op.comment]
+    end
+
+    # PCallSetReturn(ret_d_label, return_label):
+    # Create a data word holding &return_label, then copy it into the D operand cell.
+    # Output:
+    #   addr_DATA: &return_label   (data: address of return label)
+    #   ZERO, addr_DATA, ret_d_label, NEXT  (copy address into D cell)
+    def expand_call_set_return(op)
+      # Emit a data word with &return_label as value
+      addr_name = @mem.temp
+      @instructions << [:addr_data, addr_name, op.return_label, op.comment]
+      # Copy the address value into the callee's D operand cell
+      z = @mem.zero
+      @instructions << Subneg4.new(z, addr_name, op.ret_d_label, 'NEXT', op.comment)
     end
   end
 end

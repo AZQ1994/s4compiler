@@ -105,4 +105,35 @@ module S4C
   class PHalt < PseudoOp
     def to_s = "P_HALT"
   end
+
+  # P_CALL_SET_RETURN(ret_d_label, return_label):
+  # Write &return_label into the D operand of the callee's return jump.
+  # ret_d_label is the per-operand label (cd:) on the D operand of the callee's PReturnJump.
+  # Uses self-modifying code: creates a data word holding &return_label,
+  # then copies it into the D operand cell.
+  class PCallSetReturn < PseudoOp
+    attr_reader :ret_d_label, :return_label
+
+    def initialize(ret_d_label, return_label, comment: "")
+      super(comment: comment)
+      @ret_d_label = ret_d_label
+      @return_label = return_label
+    end
+
+    def to_s = "P_CALL_SET_RETURN #{@ret_d_label}, #{@return_label}"
+  end
+
+  # P_RETURN_JUMP(d_label):
+  # A goto instruction whose D operand is writable (per-operand label d_label).
+  # The caller overwrites d_label with the correct return address before calling.
+  class PReturnJump < PseudoOp
+    attr_reader :d_label
+
+    def initialize(d_label, comment: "")
+      super(comment: comment)
+      @d_label = d_label
+    end
+
+    def to_s = "P_RETURN_JUMP #{@d_label}"
+  end
 end

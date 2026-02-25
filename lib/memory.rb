@@ -7,19 +7,58 @@ module S4C
     attr_reader :data_entries, :constants
 
     def initialize
-      @variables = {}       # IR variable name → SUBNEG4 label name
+      @variables = {}       # "func::ir_name" → SUBNEG4 label name
       @constants = {}       # integer value → label name
       @temps     = 0        # temp counter
       @data_entries = []    # ordered list of [label, initial_value]
       @used_names = {}
+      @labels = []          # labels that need a data slot for goto targets
 
       # Pre-allocate ZERO constant (always needed)
       alloc_const(0)
     end
 
-    # Get or create a SUBNEG4 label for an IR variable (%name)
+    # Get or create a function-scoped variable
+    def func_var(func_name, ir_name)
+      key = "#{func_name}::#{ir_name}"
+      @variables[key] ||= alloc_var("#{func_name}_#{sanitize(ir_name)}")
+    end
+
+    # Register a function parameter
+    def func_param(func_name, ir_name)
+      key = "#{func_name}::#{ir_name}"
+      label = "#{func_name}_arg_#{sanitize(ir_name)}"
+      label = unique_name(label)
+      @variables[key] = label
+      @data_entries << [label, 0]
+      @used_names[label] = true
+      label
+    end
+
+    # Allocate a local variable for alloca (function-scoped)
+    def func_alloca(func_name, ir_name)
+      key = "#{func_name}::#{ir_name}"
+      label = "#{func_name}_local_#{sanitize(ir_name)}"
+      label = unique_name(label)
+      @variables[key] = label
+      @data_entries << [label, 0]
+      @used_names[label] = true
+      label
+    end
+
+    # Backward compat: unscoped var (for single-function programs)
     def var(ir_name)
-      @variables[ir_name] ||= alloc_var("v_#{sanitize(ir_name)}")
+      func_var("_", ir_name)
+    end
+
+    # Backward compat: unscoped param
+    def param(ir_name)
+      func_param("_", ir_name)
+    end
+
+    # Backward compat: unscoped alloca
+    def alloca_var(ir_name)
+      func_alloca("_", ir_name)
     end
 
     # Get or create a label for a constant value
@@ -34,27 +73,16 @@ module S4C
       alloc_var(name, 0)
     end
 
-    # Get the label for constant zero (always "ZERO")
+    # Get the label for constant zero
     def zero
       const(0)
     end
 
-    # Register a function parameter as a variable with initial value 0
-    def param(ir_name)
-      label = "arg_#{sanitize(ir_name)}"
-      label = unique_name(label)
-      @variables[ir_name] = label
-      @data_entries << [label, 0]
-      label
-    end
-
-    # Allocate a named data slot (e.g. for alloca)
-    def alloca_var(ir_name)
-      label = "local_#{sanitize(ir_name)}"
-      label = unique_name(label)
-      @variables[ir_name] = label
-      @data_entries << [label, 0]
-      label
+    # Allocate a label that can be used as a goto target (needs data slot)
+    def alloc_label(name)
+      name = unique_name(name) if @used_names[name]
+      @used_names[name] = true
+      name
     end
 
     private

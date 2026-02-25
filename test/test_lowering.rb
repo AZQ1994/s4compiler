@@ -30,7 +30,7 @@ class TestLowering < Minitest::Test
     output = compile(ir)
     assert_includes output, "C_3:3"
     assert_includes output, "C_5:5"
-    assert_includes output, "v___retval"
+    assert_includes output, "main___retval"
     assert_includes output, "HALT"
     assert_includes output, ">>> Result:"
   end
@@ -61,7 +61,7 @@ class TestLowering < Minitest::Test
     LL
 
     output = compile(ir)
-    assert_includes output, "bb_done"
+    assert_includes output, "main_bb_done"
     assert_includes output, "HALT"
   end
 
@@ -79,11 +79,8 @@ class TestLowering < Minitest::Test
     LL
 
     output = compile(ir)
-    assert_includes output, "bb_then"
-    assert_includes output, "bb_else"
-    # Should have conditional branch instruction
-    assert_match(/bb_then/, output)
-    assert_match(/bb_else/, output)
+    assert_includes output, "main_bb_then"
+    assert_includes output, "main_bb_else"
   end
 
   def test_alloca_store_load
@@ -98,7 +95,39 @@ class TestLowering < Minitest::Test
     LL
 
     output = compile(ir)
-    assert_includes output, "local_1:0"
+    assert_includes output, "main_local_1:0"
     assert_includes output, "C_42:42"
+  end
+
+  def test_function_call
+    ir = <<~LL
+      define i32 @add(i32 %a, i32 %b) {
+      entry:
+        %r = add i32 %a, %b
+        ret i32 %r
+      }
+      define i32 @main() {
+      entry:
+        %1 = call i32 @add(i32 3, i32 5)
+        ret i32 %1
+      }
+    LL
+
+    output = compile(ir)
+    # Both functions exist
+    assert_includes output, "func_add"
+    assert_includes output, "func_main"
+    # Argument passing
+    assert_includes output, "add_arg_a"
+    assert_includes output, "add_arg_b"
+    # Return value
+    assert_includes output, "add___retval"
+    # Self-modifying return
+    assert_includes output, "cd:add_ret_d:"
+    # Return label
+    assert_includes output, "main_ret1"
+    assert_includes output, "&main_ret1"
+    # Entry jumps to main
+    assert_match(/func_main/, output)
   end
 end

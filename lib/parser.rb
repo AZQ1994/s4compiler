@@ -79,8 +79,8 @@ module S4C
 
     # Parse a single instruction line
     def parse_instruction(line)
-      # Strip trailing comments
-      line = line.sub(/\s*;.*$/, '').strip
+      # Strip trailing comments and metadata (e.g. !llvm.loop !6)
+      line = line.sub(/\s*;.*$/, '').sub(/,?\s*![\w.]+\s+!\d+.*$/, '').strip
       return nil if line.empty?
 
       # Assignment form: %result = opcode ...
@@ -223,17 +223,17 @@ module S4C
       end
     end
 
-    # "i32 @func(i32 %a, i32 %b)"
+    # "i32 @func(i32 noundef %a, i32 noundef %b)"
     def parse_call_operands(rest)
       if rest =~ /^(\w+)\s+@([\w.]+)\(([^)]*)\)/
         ret_type = $1
         func_name = $2
         args = $3.split(',').map(&:strip).reject(&:empty?).map do |a|
-          if a =~ /^(\w+)\s+(.+)/
-            parse_value($2.strip, $1)
-          else
-            Operand.new(:raw, a)
-          end
+          parts = a.split(/\s+/)
+          type = parts.shift
+          # Skip parameter attributes (noundef, signext, etc.)
+          parts.shift while parts.any? && PARAM_ATTRS.include?(parts[0])
+          parse_value(parts.join(' ').strip, type)
         end
         [Operand.new(:label, func_name)] + args
       else
