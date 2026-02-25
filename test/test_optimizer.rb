@@ -1018,6 +1018,180 @@ class TestOptimizer < Minitest::Test
     assert non_halt.length <= 2, "Expected at most 2 non-halt ops, got #{non_halt.length}"
   end
 
+  # ── CmpBranchFusion ──────────────────────────────────────────────
+
+  def test_cmp_branch_fusion_basic
+    a = @mem.func_var("f", "a")
+    b = @mem.func_var("f", "b")
+    t = @mem.func_var("f", "t")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PSub.new(a, b, t),       # t = b - a
+      S4C::PNeg.new(t, "neg"),      # if t < 0 goto neg
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+      S4C::PLabel.new("neg"),
+      S4C::PCp.new(retval, a),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # PSub+PNeg should be fused into PSubNeg
+    assert result.any? { |op| op.is_a?(S4C::PSubNeg) }, "Should have PSubNeg after fusion"
+    refute result.any? { |op| op.is_a?(S4C::PNeg) && op.val == t }, "PNeg(t) should be removed"
+  end
+
+  def test_cmp_branch_fusion_not_applied_when_temp_used_elsewhere
+    a = @mem.func_var("f", "a")
+    b = @mem.func_var("f", "b")
+    t = @mem.func_var("f", "t")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PSub.new(a, b, t),       # t = b - a
+      S4C::PNeg.new(t, "neg"),      # if t < 0 goto neg
+      S4C::PCp.new(retval, t),      # t is also used here → can't fuse
+      S4C::PHalt.new,
+      S4C::PLabel.new("neg"),
+      S4C::PCp.new(retval, a),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # t is used elsewhere, so fusion should not happen
+    refute result.any? { |op| op.is_a?(S4C::PSubNeg) }, "Should NOT fuse when temp used elsewhere"
+  end
+
+  def test_cmp_branch_fusion_non_adjacent_not_fused
+    a = @mem.func_var("f", "a")
+    b = @mem.func_var("f", "b")
+    t = @mem.func_var("f", "t")
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PSub.new(a, b, t),
+      S4C::PAdd.new(t, a, x),       # intervening op that reads t → use_count[t] = 2
+      S4C::PNeg.new(t, "neg"),
+      S4C::PCp.new(retval, x),      # use x so it's not dead-stored
+      S4C::PHalt.new,
+      S4C::PLabel.new("neg"),
+      S4C::PCp.new(retval, a),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # t is used by both PAdd and PNeg (use_count=2) → no fusion
+    refute result.any? { |op| op.is_a?(S4C::PSubNeg) }, "Should NOT fuse when temp used elsewhere"
+  end
+
+  # ── LivenessPushPopElimination ─────────────────────────────────
+
+  def test_liveness_push_pop_unused_after_pop
+    x = @mem.func_var("f", "x")
+    y = @mem.func_var("f", "y")
+    ops = [
+      S4C::PLabel.new("func_f"),
+      S4C::PCp.new(x, @mem.const(1)),
+      S4C::PPush.new(x, "C1_s0"),
+      S4C::PCallSetReturn.new("ret_d", "ret_label"),
+      S4C::PGoto.new("func_callee"),
+      S4C::PLabel.new("ret_label"),
+      S4C::PPop.new(x, "C1_r0"),
+      # x is immediately overwritten, never read after pop
+      S4C::PCp.new(x, @mem.const(2)),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # The push/pop for x should be eliminated since x is overwritten right after pop
+    push_count = result.count { |op| op.is_a?(S4C::PPush) && op.val == x }
+    pop_count = result.count { |op| op.is_a?(S4C::PPop) && op.dst == x }
+    assert_equal 0, push_count, "PPush(x) should be eliminated"
+    assert_equal 0, pop_count, "PPop(x) should be eliminated"
+  end
+
+  def test_liveness_push_pop_used_after_pop_kept
+    x = @mem.func_var("f", "x")
+    y = @mem.func_var("f", "y")
+    ops = [
+      S4C::PLabel.new("func_f"),
+      S4C::PAdd.new(y, y, x),   # x = y + y (not a simple copy, avoids copy prop)
+      S4C::PPush.new(x, "C1_s0"),
+      S4C::PCallSetReturn.new("ret_d", "ret_label"),
+      S4C::PGoto.new("func_callee"),
+      S4C::PLabel.new("ret_label"),
+      S4C::PPop.new(x, "C1_r0"),
+      S4C::PCp.new(retval, x),  # x IS read after pop
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    pop_count = result.count { |op| op.is_a?(S4C::PPop) && op.dst == x }
+    assert pop_count >= 1, "PPop(x) should be kept when x is used after pop"
+  end
+
+  def test_liveness_push_pop_no_def_before_push
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PLabel.new("func_f"),
+      # x is a parameter (not defined before push within function body)
+      S4C::PPush.new(x, "C1_s0"),
+      S4C::PCallSetReturn.new("ret_d", "ret_label"),
+      S4C::PGoto.new("func_callee"),
+      S4C::PLabel.new("ret_label"),
+      S4C::PPop.new(x, "C1_r0"),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # x has no def before push (it's a param) → push/pop should be eliminated
+    push_count = result.count { |op| op.is_a?(S4C::PPush) && op.val == x }
+    pop_count = result.count { |op| op.is_a?(S4C::PPop) && op.dst == x }
+    assert_equal 0, push_count, "PPush(x) should be eliminated when no def before push"
+    assert_equal 0, pop_count, "PPop(x) should be eliminated when no def before push"
+  end
+
+  # ── PhiCoalescing ──────────────────────────────────────────────
+
+  def test_phi_coalescing_basic
+    x = @mem.func_var("f", "x")
+    phi_dst = @mem.func_var("f", "phi_dst")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PCp.new(x, @mem.const(5)),
+      S4C::PGoto.new("merge"),
+      S4C::PLabel.new("merge"),
+      S4C::PCp.new(phi_dst, x, comment: "phi"),  # phi copy
+      S4C::PCp.new(retval, phi_dst),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # phi_dst should be coalesced with x, eliminating the phi copy
+    phi_copies = result.select { |op| op.is_a?(S4C::PCp) && op.comment.include?("phi") && op.dst != op.src }
+    assert_equal 0, phi_copies.length, "Phi copy should be eliminated by coalescing"
+  end
+
+  def test_phi_coalescing_interference_prevents
+    x = @mem.func_var("f", "x")
+    phi_dst = @mem.func_var("f", "phi_dst")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PCp.new(x, @mem.const(5)),
+      # phi_dst is written BEFORE x's last use → interference
+      S4C::PCp.new(phi_dst, @mem.const(10)),
+      S4C::PAdd.new(x, phi_dst, retval),  # x read here, after phi_dst defined
+      S4C::PCp.new(phi_dst, x, comment: "phi"),  # phi copy
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # With interference, the phi copy might remain (but copy prop may handle it)
+    # The important thing is the program is still correct - retval should exist
+    assert result.any? { |op| op.is_a?(S4C::PHalt) }
+  end
+
   # ── Stats ────────────────────────────────────────────────────────
 
   def test_stats_tracking

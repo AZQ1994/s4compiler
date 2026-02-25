@@ -37,10 +37,13 @@ module S4C
         changed |= constant_folding
         changed |= strength_reduction
         changed |= peephole_double_negation
+        changed |= cmp_branch_fusion
         changed |= local_value_numbering
         changed |= loop_invariant_code_motion
         changed |= copy_propagation
+        changed |= phi_coalescing
         changed |= dead_store_elimination
+        changed |= liveness_push_pop_elimination
         changed |= push_pop_elimination
         compute_jump_targets if changed  # recompute for next iteration
         break unless changed
@@ -56,12 +59,13 @@ module S4C
     # Return variable names read by an op
     def reads(op)
       case op
-      when PSub  then [op.a, op.b]
-      when PAdd  then [op.a, op.b]
-      when PCp   then [op.src]
-      when PNeg  then [op.val]
-      when PPush then [op.val]
-      when PPop  then []
+      when PSub     then [op.a, op.b]
+      when PSubNeg  then [op.a, op.b]
+      when PAdd     then [op.a, op.b]
+      when PCp      then [op.src]
+      when PNeg     then [op.val]
+      when PPush    then [op.val]
+      when PPop     then []
       when PIndirectLoad  then [op.addr_var]
       when PIndirectStore then [op.addr_var, op.val]
       when PGoto, PLabel, PData, PHalt, PCallSetReturn, PReturnJump
@@ -79,7 +83,7 @@ module S4C
       when PCp   then [op.dst]
       when PPop  then [op.dst]
       when PIndirectLoad then [op.dst]
-      when PNeg, PGoto, PLabel, PData, PHalt, PPush,
+      when PSubNeg, PNeg, PGoto, PLabel, PData, PHalt, PPush,
            PIndirectStore, PCallSetReturn, PReturnJump
         []
       else
@@ -91,6 +95,7 @@ module S4C
     def protected_var?(v)
       return true if v.include?('___retval')
       return true if v.include?('_arg_')
+      return true if v.end_with?('_ret_d')
       return true if v == '__stack_SP'
       return true if v.start_with?('__mul_', '__sdiv_', '__srem_',
                                     '__shl_', '__shr_',
@@ -116,8 +121,9 @@ module S4C
       @jump_targets = Set.new
       @ops.each do |op|
         case op
-        when PGoto then @jump_targets << op.label
-        when PNeg  then @jump_targets << op.label
+        when PGoto   then @jump_targets << op.label
+        when PNeg    then @jump_targets << op.label
+        when PSubNeg then @jump_targets << op.label
         when PCallSetReturn then @jump_targets << op.return_label
         end
       end
@@ -205,6 +211,14 @@ module S4C
           else
             op
           end
+        when PSubNeg
+          target = redirect[op.label]
+          if target
+            changed = true
+            PSubNeg.new(op.a, op.b, target, comment: op.comment)
+          else
+            op
+          end
         else
           op
         end
@@ -224,6 +238,12 @@ module S4C
           if nxt.is_a?(PGoto) && nxt.label == op.label
             changed = true
             next # skip PNeg, keep PGoto
+          end
+        elsif op.is_a?(PSubNeg)
+          nxt = @ops[i + 1]
+          if nxt.is_a?(PGoto) && nxt.label == op.label
+            changed = true
+            next # skip PSubNeg, keep PGoto
           end
         end
         result << op
@@ -264,8 +284,9 @@ module S4C
       referenced = Set.new
       @ops.each do |op|
         case op
-        when PGoto then referenced << op.label
-        when PNeg  then referenced << op.label
+        when PGoto   then referenced << op.label
+        when PNeg    then referenced << op.label
+        when PSubNeg then referenced << op.label
         when PCallSetReturn then referenced << op.return_label
         end
       end
@@ -434,7 +455,7 @@ module S4C
 
       @ops.each do |op|
         # Reset at block boundaries
-        if op.is_a?(PLabel) || barrier?(op) || unconditional_transfer?(op) || op.is_a?(PNeg)
+        if op.is_a?(PLabel) || barrier?(op) || unconditional_transfer?(op) || op.is_a?(PNeg) || op.is_a?(PSubNeg)
           result << op
           value_map = {} if op.is_a?(PLabel) || barrier?(op) || unconditional_transfer?(op)
           next
@@ -631,7 +652,7 @@ module S4C
         end
 
         # Reset substitutions after unconditional transfers and conditional branches
-        if unconditional_transfer?(op) || op.is_a?(PNeg)
+        if unconditional_transfer?(op) || op.is_a?(PNeg) || op.is_a?(PSubNeg)
           prev_falls_through = unconditional_transfer?(op) ? false : true
           subst = {}
         else
@@ -667,6 +688,11 @@ module S4C
         s2 = subst[op.src] || op.src
         s2 != op.src ? PCp.new(op.dst, s2, comment: op.comment) : op
 
+      when PSubNeg
+        a2 = subst[op.a] || op.a
+        b2 = subst[op.b] || op.b
+        (a2 != op.a || b2 != op.b) ? PSubNeg.new(a2, b2, op.label, comment: op.comment) : op
+
       when PNeg
         v2 = subst[op.val] || op.val
         v2 != op.val ? PNeg.new(v2, op.label, comment: op.comment) : op
@@ -701,8 +727,9 @@ module S4C
       # Also mark special references as used
       @ops.each do |op|
         case op
-        when PGoto then used << op.label
-        when PNeg  then used << op.label
+        when PGoto   then used << op.label
+        when PNeg    then used << op.label
+        when PSubNeg then used << op.label
         when PCallSetReturn
           used << op.ret_d_label
           used << op.return_label
@@ -738,6 +765,231 @@ module S4C
       changed
     end
 
+    # ── Pass: CmpBranchFusion ────────────────────────────────────────
+    # PSub(a, b, t) followed by PNeg(t, L) where t is only used by those two
+    # → PSubNeg(a, b, L)
+
+    def cmp_branch_fusion
+      changed = false
+
+      # Count uses of each variable (read occurrences)
+      use_count = Hash.new(0)
+      @ops.each do |op|
+        reads(op).each { |v| use_count[v] += 1 }
+      end
+
+      result = []
+      i = 0
+      while i < @ops.length
+        op = @ops[i]
+        nxt = @ops[i + 1]
+        if op.is_a?(PSub) && nxt.is_a?(PNeg) &&
+           op.c == nxt.val && use_count[op.c] == 1
+          result << PSubNeg.new(op.a, op.b, nxt.label, comment: "#{op.comment} [fused cmp+br]")
+          changed = true
+          i += 2
+        else
+          result << op
+          i += 1
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
+    # ── Pass: PhiCoalescing ──────────────────────────────────────────
+    # Merge phi copy destinations with their sources when they don't interfere.
+
+    def phi_coalescing
+      changed = false
+
+      # Collect phi copies: PCp with "phi" in comment
+      phi_copies = []
+      @ops.each_with_index do |op, i|
+        if op.is_a?(PCp) && op.comment.include?("phi")
+          phi_copies << { idx: i, dst: op.dst, src: op.src }
+        end
+      end
+
+      return false if phi_copies.empty?
+
+      phi_copies.each do |phi|
+        dst = phi[:dst]
+        src = phi[:src]
+        next if dst == src
+
+        # Skip if dst is written elsewhere (replacing would create writes to src)
+        dst_write_count = 0
+        @ops.each_with_index do |op, i|
+          dst_write_count += 1 if writes(op).include?(dst)
+        end
+        # dst should only be written by this one phi copy
+        next if dst_write_count > 1
+
+        # Skip if src is a constant or protected variable (would be corrupted)
+        next if protected_var?(src)
+        const_map = build_constant_map
+        next if const_map.key?(src)
+
+        # Collect indices where dst and src are read/written
+        src_last_read = -1
+
+        @ops.each_with_index do |op, i|
+          reads(op).each { |v| src_last_read = i if v == src }
+        end
+
+        dst_first_def = phi[:idx]
+
+        # Non-interference: src's last use <= dst's first definition
+        next unless src_last_read <= dst_first_def
+
+        # Coalesce: replace dst with src in all ops
+        @ops = @ops.map { |op| replace_var_in_op(op, dst, src) }
+        # Remove self-copies
+        @ops.reject! { |op| op.is_a?(PCp) && op.dst == op.src }
+        changed = true
+      end
+
+      changed
+    end
+
+    # Replace occurrences of old_var with new_var in an op's read/write positions
+    def replace_var_in_op(op, old_var, new_var)
+      case op
+      when PSub
+        a2 = op.a == old_var ? new_var : op.a
+        b2 = op.b == old_var ? new_var : op.b
+        c2 = op.c == old_var ? new_var : op.c
+        (a2 != op.a || b2 != op.b || c2 != op.c) ? PSub.new(a2, b2, c2, comment: op.comment) : op
+      when PSubNeg
+        a2 = op.a == old_var ? new_var : op.a
+        b2 = op.b == old_var ? new_var : op.b
+        (a2 != op.a || b2 != op.b) ? PSubNeg.new(a2, b2, op.label, comment: op.comment) : op
+      when PAdd
+        a2 = op.a == old_var ? new_var : op.a
+        b2 = op.b == old_var ? new_var : op.b
+        c2 = op.c == old_var ? new_var : op.c
+        (a2 != op.a || b2 != op.b || c2 != op.c) ? PAdd.new(a2, b2, c2, comment: op.comment) : op
+      when PCp
+        d2 = op.dst == old_var ? new_var : op.dst
+        s2 = op.src == old_var ? new_var : op.src
+        (d2 != op.dst || s2 != op.src) ? PCp.new(d2, s2, comment: op.comment) : op
+      when PNeg
+        v2 = op.val == old_var ? new_var : op.val
+        v2 != op.val ? PNeg.new(v2, op.label, comment: op.comment) : op
+      when PPush
+        v2 = op.val == old_var ? new_var : op.val
+        v2 != op.val ? PPush.new(v2, op.push_id, comment: op.comment) : op
+      when PPop
+        d2 = op.dst == old_var ? new_var : op.dst
+        d2 != op.dst ? PPop.new(d2, op.pop_id, comment: op.comment) : op
+      when PIndirectLoad
+        d2 = op.dst == old_var ? new_var : op.dst
+        a2 = op.addr_var == old_var ? new_var : op.addr_var
+        (d2 != op.dst || a2 != op.addr_var) ? PIndirectLoad.new(d2, a2, op.id, comment: op.comment) : op
+      when PIndirectStore
+        a2 = op.addr_var == old_var ? new_var : op.addr_var
+        v2 = op.val == old_var ? new_var : op.val
+        (a2 != op.addr_var || v2 != op.val) ? PIndirectStore.new(a2, v2, op.id, comment: op.comment) : op
+      else
+        op
+      end
+    end
+
+    # ── Pass: LivenessPushPopElimination ──────────────────────────────
+    # More precise push/pop elimination using local liveness analysis.
+
+    def liveness_push_pop_elimination
+      changed = false
+
+      # Group PPush/PPop by call_id
+      call_sites = Hash.new { |h, k| h[k] = { pushes: [], pops: [] } }
+      @ops.each_with_index do |op, i|
+        case op
+        when PPush
+          call_id = op.push_id.sub(/_s\d+$/, '')
+          call_sites[call_id][:pushes] << { idx: i, var: op.val }
+        when PPop
+          call_id = op.pop_id.sub(/_r\d+$/, '')
+          call_sites[call_id][:pops] << { idx: i, var: op.dst }
+        end
+      end
+
+      to_remove = Set.new
+
+      call_sites.each do |_call_id, site|
+        site[:pops].each do |pop_info|
+          pop_idx = pop_info[:idx]
+          var = pop_info[:var]
+
+          next if protected_var?(var)
+
+          # Find matching push
+          matching_push = site[:pushes].find { |p| p[:var] == var }
+          next unless matching_push
+          push_idx = matching_push[:idx]
+
+          # Check 1: used-after — scan forward from pop, is var read before written?
+          used_after = true  # conservative default
+          ((pop_idx + 1)...@ops.length).each do |j|
+            op_j = @ops[j]
+            r = reads(op_j)
+            w = writes(op_j)
+            if r.include?(var)
+              used_after = true
+              break
+            end
+            if w.include?(var)
+              # Written before read → not needed
+              used_after = false
+              break
+            end
+            # Control flow boundary → conservatively keep
+            if op_j.is_a?(PLabel) || op_j.is_a?(PNeg) || op_j.is_a?(PSubNeg) || op_j.is_a?(PGoto)
+              used_after = true
+              break
+            end
+          end
+
+          unless used_after
+            to_remove << push_idx
+            to_remove << pop_idx
+            changed = true
+            next
+          end
+
+          # Check 2: defined-before — scan backward from push to function entry
+          defined_before = true  # conservative default
+          found_func_entry = false
+          (push_idx - 1).downto(0) do |j|
+            op_j = @ops[j]
+            if writes(op_j).include?(var)
+              defined_before = true
+              break
+            end
+            if op_j.is_a?(PLabel) && op_j.name.start_with?('func_')
+              found_func_entry = true
+              defined_before = false
+              break
+            end
+          end
+
+          if found_func_entry && !defined_before
+            to_remove << push_idx
+            to_remove << pop_idx
+            changed = true
+          end
+        end
+      end
+
+      if changed
+        @ops = @ops.each_with_index.reject { |_, i| to_remove.include?(i) }.map(&:first)
+      end
+
+      changed
+    end
+
     # ── Pass 11: PushPopElimination ──────────────────────────────────
     # Remove PPush/PPop pairs where the restored value is never used.
     # Standard DSE can't catch this because PPush reads the variable,
@@ -754,8 +1006,9 @@ module S4C
       # Also include special references
       @ops.each do |op|
         case op
-        when PGoto then used_without_push << op.label
-        when PNeg  then used_without_push << op.label
+        when PGoto   then used_without_push << op.label
+        when PNeg    then used_without_push << op.label
+        when PSubNeg then used_without_push << op.label
         when PCallSetReturn
           used_without_push << op.ret_d_label
           used_without_push << op.return_label

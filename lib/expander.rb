@@ -29,12 +29,13 @@ module S4C
 
     def expand_one(op)
       case op
-      when PSub  then expand_sub(op)
-      when PAdd  then expand_add(op)
-      when PCp   then expand_cp(op)
-      when PGoto then expand_goto(op)
-      when PNeg  then expand_neg(op)
-      when PHalt then expand_halt(op)
+      when PSub    then expand_sub(op)
+      when PSubNeg then expand_subneg(op)
+      when PAdd    then expand_add(op)
+      when PCp     then expand_cp(op)
+      when PGoto   then expand_goto(op)
+      when PNeg    then expand_neg(op)
+      when PHalt   then expand_halt(op)
       when PCallSetReturn then expand_call_set_return(op)
       when PReturnJump    then expand_return_jump(op)
       when PPush          then expand_push(op)
@@ -52,6 +53,11 @@ module S4C
 
     def expand_sub(op)
       @instructions << Subneg4.new(op.a, op.b, op.c, 'NEXT', op.comment)
+    end
+
+    def expand_subneg(op)
+      t = @mem.temp
+      @instructions << Subneg4.new(op.a, op.b, t, op.label, op.comment)
     end
 
     def expand_add(op)

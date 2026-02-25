@@ -76,6 +76,20 @@ module S4C
     def to_s = "P_NEG #{@val}, #{@label}"
   end
 
+  # P_SUBNEG(a, b, label): t = b - a; if t < 0 goto label → one SUBNEG4 instruction
+  class PSubNeg < PseudoOp
+    attr_reader :a, :b, :label
+
+    def initialize(a, b, label, comment: "")
+      super(comment: comment)
+      @a = a
+      @b = b
+      @label = label
+    end
+
+    def to_s = "P_SUBNEG #{@a}, #{@b}, #{@label}"
+  end
+
   # P_LABEL(name): a label marker (no code generated, just a position)
   class PLabel < PseudoOp
     attr_reader :name
