@@ -130,4 +130,29 @@ class TestLowering < Minitest::Test
     # Entry jumps to main
     assert_match(/func_main/, output)
   end
+
+  def test_array
+    ir = <<~LL
+      define i32 @main() {
+      entry:
+        %1 = alloca [3 x i32], align 4
+        %2 = getelementptr inbounds [3 x i32], ptr %1, i64 0, i64 0
+        store i32 10, ptr %2, align 4
+        %3 = getelementptr inbounds [3 x i32], ptr %1, i64 0, i64 1
+        store i32 20, ptr %3, align 4
+        %4 = getelementptr inbounds [3 x i32], ptr %1, i64 0, i64 0
+        %5 = load i32, ptr %4, align 4
+        %6 = getelementptr inbounds [3 x i32], ptr %1, i64 0, i64 1
+        %7 = load i32, ptr %6, align 4
+        %8 = add i32 %5, %7
+        ret i32 %8
+      }
+    LL
+
+    output = compile(ir)
+    assert_includes output, "main_arr_1_0:0"
+    assert_includes output, "main_arr_1_1:0"
+    assert_includes output, "C_10:10"
+    assert_includes output, "C_20:20"
+  end
 end

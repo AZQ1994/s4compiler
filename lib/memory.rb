@@ -12,7 +12,7 @@ module S4C
       @temps     = 0        # temp counter
       @data_entries = []    # ordered list of [label, initial_value]
       @used_names = {}
-      @labels = []          # labels that need a data slot for goto targets
+      @arrays = {}          # "func::ir_name" → [element_label_0, element_label_1, ...]
 
       # Pre-allocate ZERO constant (always needed)
       alloc_const(0)
@@ -78,7 +78,38 @@ module S4C
       const(0)
     end
 
-    # Allocate a label that can be used as a goto target (needs data slot)
+    # Allocate an array of N consecutive data cells
+    def func_alloca_array(func_name, ir_name, size)
+      key = "#{func_name}::#{ir_name}"
+      base = "#{func_name}_arr_#{sanitize(ir_name)}"
+      elements = size.times.map do |i|
+        label = "#{base}_#{i}"
+        label = unique_name(label)
+        @used_names[label] = true
+        @data_entries << [label, 0]
+        label
+      end
+      @arrays[key] = elements
+      # The variable itself points to the first element
+      @variables[key] = elements[0]
+      elements[0]
+    end
+
+    # Get the label for array element at constant index
+    def func_array_element(func_name, ir_name, index)
+      key = "#{func_name}::#{ir_name}"
+      arr = @arrays[key]
+      return nil unless arr
+      return nil if index < 0 || index >= arr.length
+      arr[index]
+    end
+
+    # Set a variable key to alias an existing label
+    def set_alias(key, label)
+      @variables[key] = label
+    end
+
+    # Allocate a label that can be used as a goto target
     def alloc_label(name)
       name = unique_name(name) if @used_names[name]
       @used_names[name] = true

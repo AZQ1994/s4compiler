@@ -200,9 +200,12 @@ module S4C
       end
     end
 
-    # "i32, align 4"
+    # "i32, align 4" or "[3 x i32], align 4"
     def parse_alloca_operands(rest)
-      if rest =~ /^(\w+)/
+      if rest =~ /^\[(\d+)\s*x\s*(\w+)\]/
+        # Array alloca: [N x type]
+        [Operand.new(:const, $1.to_i), Operand.new(:type, $2)]
+      elsif rest =~ /^(\w+)/
         [Operand.new(:type, $1)]
       else
         [Operand.new(:raw, rest)]

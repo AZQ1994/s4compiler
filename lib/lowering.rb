@@ -79,10 +79,11 @@ module S4C
       when 'ret'  then lower_ret(inst)
       when 'br'   then lower_br(inst)
       when 'icmp' then lower_icmp(inst)
-      when 'alloca' then lower_alloca(inst)
-      when 'load'   then lower_load(inst)
-      when 'store'  then lower_store(inst)
-      when 'call'   then lower_call(inst)
+      when 'alloca'        then lower_alloca(inst)
+      when 'load'          then lower_load(inst)
+      when 'store'         then lower_store(inst)
+      when 'getelementptr' then lower_gep(inst)
+      when 'call'          then lower_call(inst)
       when 'phi'    then lower_phi(inst)
       when 'sext', 'zext', 'trunc', 'bitcast'
         lower_cast(inst)
@@ -179,7 +180,42 @@ module S4C
     end
 
     def lower_alloca(inst)
-      @mem.func_alloca(@current_func, inst.result)
+      if inst.operands.length >= 2 && inst.operands[0].const?
+        # Array alloca: [N x type]
+        size = inst.operands[0].value
+        @mem.func_alloca_array(@current_func, inst.result, size)
+      else
+        @mem.func_alloca(@current_func, inst.result)
+      end
+    end
+
+    # %r = getelementptr inbounds [3 x i32], ptr %base, i64 0, i64 INDEX
+    def lower_gep(inst)
+      # operands: [raw:[3 x i32], var:base, const:0, const:index]
+      # For constant indices, resolve to the specific array element label
+      base_op = inst.operands.find { |o| o.var? }
+      index_ops = inst.operands.select { |o| o.const? }
+
+      if base_op && index_ops.length >= 1
+        # Last constant index is the element index
+        element_idx = index_ops.last.value
+        base_name = base_op.value
+
+        # Look up the array element label
+        element_label = @mem.func_array_element(@current_func, base_name, element_idx)
+        if element_label
+          # GEP result is an alias to the element
+          key = "#{@current_func}::#{inst.result}"
+          @mem.set_alias(key, element_label)
+        else
+          # Fallback: treat as pointer arithmetic
+          fvar(inst.result)
+          emit PLabel.new("", comment: "GEP fallback: #{inst.raw}")
+        end
+      else
+        fvar(inst.result)
+        emit PLabel.new("", comment: "UNSUPPORTED GEP: #{inst.raw}")
+      end
     end
 
     # %r = load i32, ptr %p
