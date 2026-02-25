@@ -281,4 +281,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 6, sim.read_label('main___retval')
   end
+
+  def test_collatz
+    # collatz_steps(27) = 111
+    sim, result, _ = compile_and_run(fixture('collatz.ll'), max_cycles: 100_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 111, sim.read_label('main___retval')
+  end
 end
