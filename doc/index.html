@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S4C: LLVM IR → SUBNEG4 Compiler</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --cyan: #39d353;
+    --pink: #f778ba;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 0;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    background: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hero h1 {
+    font-size: 2.8em;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+
+  .hero .subtitle {
+    color: var(--text-dim);
+    font-size: 1.2em;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .badge-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85em;
+    font-weight: 600;
+  }
+
+  .badge-green  { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+  .badge-blue   { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+  .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid rgba(188,140,255,0.3); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); border: 1px solid rgba(210,153,34,0.3); }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+  section { margin-bottom: 60px; }
+
+  h2 {
+    font-size: 1.8em;
+    font-weight: 700;
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 1.3em;
+    font-weight: 600;
+    margin: 24px 0 12px;
+    color: var(--accent);
+  }
+
+  p { margin-bottom: 12px; color: var(--text-dim); }
+
+  /* Pipeline diagram */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 30px 10px;
+    overflow-x: auto;
+    flex-wrap: wrap;
+  }
+
+  .pipe-node {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 130px;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .pipe-node:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(88,166,255,0.15);
+  }
+
+  .pipe-node .icon { font-size: 2em; margin-bottom: 6px; }
+  .pipe-node .label { font-weight: 700; font-size: 0.95em; }
+  .pipe-node .ext { color: var(--text-dim); font-size: 0.8em; font-family: monospace; }
+
+  .pipe-arrow {
+    color: var(--text-dim);
+    font-size: 1.8em;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+
+  .pipe-tool {
+    font-size: 0.7em;
+    color: var(--orange);
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  .arch-stage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .arch-header {
+    padding: 12px 20px;
+    font-weight: 700;
+    font-size: 1.05em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .arch-body {
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 0.9em;
+    color: var(--text-dim);
+  }
+
+  .stage-parser  .arch-header { background: rgba(88,166,255,0.1); color: var(--accent); }
+  .stage-lower   .arch-header { background: rgba(188,140,255,0.1); color: var(--purple); }
+  .stage-expand  .arch-header { background: rgba(210,153,34,0.1); color: var(--orange); }
+  .stage-emit    .arch-header { background: rgba(63,185,80,0.1); color: var(--green); }
+
+  .stage-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 0.85em;
+    flex-shrink: 0;
+  }
+
+  .stage-parser  .stage-num { background: rgba(88,166,255,0.2); }
+  .stage-lower   .stage-num { background: rgba(188,140,255,0.2); }
+  .stage-expand  .stage-num { background: rgba(210,153,34,0.2); }
+  .stage-emit    .stage-num { background: rgba(63,185,80,0.2); }
+
+  .file-tag {
+    font-family: monospace;
+    font-size: 0.8em;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+    margin-left: auto;
+  }
+
+  .down-arrow-row {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 1.6em;
+    padding: 4px 0;
+  }
+
+  .data-label {
+    display: inline-block;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-family: monospace;
+    font-size: 0.85em;
+    margin: 2px;
+  }
+
+  /* Code blocks */
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.88em;
+    line-height: 1.5;
+    margin: 12px 0;
+  }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.9em;
+  }
+
+  .kw  { color: var(--purple); }
+  .fn  { color: var(--accent); }
+  .str { color: #a5d6ff; }
+  .num { color: var(--orange); }
+  .cmt { color: var(--text-dim); font-style: italic; }
+  .op  { color: var(--red); }
+  .var { color: var(--green); }
+  .lbl { color: var(--pink); }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.9em;
+  }
+
+  th, td {
+    padding: 10px 14px;
+    text-align: left;
+    border: 1px solid var(--border);
+  }
+
+  th {
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  td {
+    color: var(--text-dim);
+  }
+
+  td code {
+    background: rgba(255,255,255,0.06);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  tr:hover td { background: rgba(88,166,255,0.04); }
+
+  /* SUBNEG4 visual instruction */
+  .subneg-box {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 20px auto;
+    max-width: 700px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 2px solid var(--border);
+  }
+
+  .subneg-cell {
+    flex: 1;
+    padding: 14px 10px;
+    text-align: center;
+    border-right: 1px solid var(--border);
+  }
+
+  .subneg-cell:last-child { border-right: none; }
+
+  .subneg-cell .cell-label {
+    font-weight: 700;
+    font-size: 1.4em;
+    margin-bottom: 4px;
+  }
+
+  .subneg-cell .cell-desc {
+    font-size: 0.75em;
+    color: var(--text-dim);
+  }
+
+  .cell-a { background: rgba(248,81,73,0.1); }
+  .cell-a .cell-label { color: var(--red); }
+  .cell-b { background: rgba(88,166,255,0.1); }
+  .cell-b .cell-label { color: var(--accent); }
+  .cell-c { background: rgba(63,185,80,0.1); }
+  .cell-c .cell-label { color: var(--green); }
+  .cell-d { background: rgba(188,140,255,0.1); }
+  .cell-d .cell-label { color: var(--purple); }
+
+  .formula {
+    text-align: center;
+    font-size: 1.3em;
+    margin: 16px 0;
+    padding: 16px;
+    background: var(--surface);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-family: 'SF Mono', monospace;
+  }
+
+  .formula .var-a { color: var(--red); }
+  .formula .var-b { color: var(--accent); }
+  .formula .var-c { color: var(--green); }
+  .formula .var-d { color: var(--purple); }
+
+  /* Memory layout */
+  .mem-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 20px 0;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .mem-row {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mem-row:last-child { border-bottom: none; }
+
+  .mem-addr {
+    width: 80px;
+    padding: 10px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 0.85em;
+    background: rgba(255,255,255,0.03);
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .mem-content {
+    flex: 1;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mem-tag {
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .mem-desc {
+    font-size: 0.85em;
+    color: var(--text-dim);
+  }
+
+  .mt-const { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .mt-global { background: rgba(188,140,255,0.15); color: var(--purple); }
+  .mt-var   { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .mt-code  { background: rgba(63,185,80,0.15); color: var(--green); }
+  .mt-stack { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  /* Self-modifying code diagram */
+  .selfmod {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+
+  .selfmod-title {
+    font-weight: 700;
+    font-size: 1.1em;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+
+  .selfmod-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .selfmod-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85em;
+    flex-shrink: 0;
+    background: rgba(88,166,255,0.15);
+    color: var(--accent);
+  }
+
+  .step-content {
+    flex: 1;
+  }
+
+  .step-asm {
+    font-family: monospace;
+    font-size: 0.9em;
+    background: rgba(0,0,0,0.3);
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-top: 4px;
+  }
+
+  /* Test results */
+  .test-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+  }
+
+  .test-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color 0.2s;
+  }
+
+  .test-card:hover { border-color: var(--green); }
+
+  .test-check {
+    color: var(--green);
+    font-size: 1.2em;
+    flex-shrink: 0;
+  }
+
+  .test-info { flex: 1; }
+  .test-name { font-weight: 600; font-size: 0.9em; color: var(--text); }
+  .test-desc { font-size: 0.75em; color: var(--text-dim); }
+  .test-result {
+    font-family: monospace;
+    font-weight: 700;
+    color: var(--cyan);
+    font-size: 0.9em;
+  }
+
+  /* Expansion detail boxes */
+  .expand-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+
+  .expand-header {
+    padding: 14px 20px;
+    font-weight: 700;
+    font-size: 1em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    user-select: none;
+  }
+
+  .expand-header:hover { background: rgba(255,255,255,0.02); }
+
+  .expand-toggle {
+    transition: transform 0.2s;
+    color: var(--text-dim);
+  }
+
+  .expand-body {
+    display: none;
+    padding: 0 20px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .expand-card.open .expand-body { display: block; }
+  .expand-card.open .expand-toggle { transform: rotate(90deg); }
+
+  .io-row {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 0;
+    align-items: center;
+    margin: 12px 0;
+  }
+
+  .io-row .arrow-col {
+    text-align: center;
+    font-size: 1.4em;
+    color: var(--text-dim);
+  }
+
+  .io-box {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .io-label {
+    font-size: 0.75em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .io-code {
+    font-family: monospace;
+    font-size: 0.88em;
+    line-height: 1.6;
+  }
+
+  /* SVG diagrams */
+  svg text {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+
+  .svg-container {
+    text-align: center;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+
+  /* Stack diagram */
+  .stack-vis {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    justify-content: center;
+    margin: 20px 0;
+    flex-wrap: wrap;
+  }
+
+  .stack-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .stack-label {
+    font-weight: 700;
+    font-size: 0.95em;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .stack-frame {
+    width: 200px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .stack-item {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: monospace;
+    font-size: 0.85em;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .stack-item:last-child { border-bottom: none; }
+  .stack-item .si-label { color: var(--text-dim); }
+  .stack-item .si-val { color: var(--accent); }
+  .stack-item.si-sp { background: rgba(248,81,73,0.1); }
+  .stack-item.si-sp .si-val { color: var(--red); }
+  .stack-item.si-ret { background: rgba(188,140,255,0.1); }
+  .stack-item.si-ret .si-val { color: var(--purple); }
+
+  .anno-arrow {
+    font-size: 0.8em;
+    color: var(--orange);
+    margin-top: 4px;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-size: 0.85em;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 700px) {
+    .hero h1 { font-size: 2em; }
+    .pipeline { flex-direction: column; align-items: center; }
+    .pipe-arrow { transform: rotate(90deg); }
+    .subneg-box { flex-wrap: wrap; }
+    .io-row { grid-template-columns: 1fr; }
+    .io-row .arrow-col { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== HERO ====== -->
+<header class="hero">
+  <h1>S4C Compiler</h1>
+  <p class="subtitle">
+    LLVM IR (.ll) を SUBNEG4 アセンブリに変換する Ruby コンパイラ。<br>
+    C言語で書かれたプログラムを、たった1つの命令しか持たないコンピュータで実行可能にする。
+  </p>
+  <div class="badge-row">
+    <span class="badge badge-green">24 tests passing</span>
+    <span class="badge badge-blue">Ruby</span>
+    <span class="badge badge-purple">OISC target</span>
+    <span class="badge badge-orange">Self-modifying code</span>
+  </div>
+</header>
+
+<div class="container">
+
+<!-- ====== SUBNEG4 INSTRUCTION ====== -->
+<section>
+  <h2>SUBNEG4 とは</h2>
+  <p>SUBNEG4 は <strong>OISC (One Instruction Set Computer)</strong> の一種。命令はたった1つだけ:</p>
+
+  <div class="subneg-box">
+    <div class="subneg-cell cell-a">
+      <div class="cell-label">A</div>
+      <div class="cell-desc">引く値の<br>アドレス</div>
+    </div>
+    <div class="subneg-cell cell-b">
+      <div class="cell-label">B</div>
+      <div class="cell-desc">引かれる値の<br>アドレス</div>
+    </div>
+    <div class="subneg-cell cell-c">
+      <div class="cell-label">C</div>
+      <div class="cell-desc">結果の<br>格納先</div>
+    </div>
+    <div class="subneg-cell cell-d">
+      <div class="cell-label">D</div>
+      <div class="cell-desc">負の場合の<br>ジャンプ先</div>
+    </div>
+  </div>
+
+  <div class="formula">
+    mem[<span class="var-c">C</span>] = mem[<span class="var-b">B</span>] &minus; mem[<span class="var-a">A</span>]
+    &emsp;;&emsp;
+    if result &lt; 0 then goto <span class="var-d">D</span> else PC += 4
+  </div>
+
+  <p>この1命令だけで、加算・乗算・条件分岐・関数呼出・配列アクセスなど、すべてのコンピュータ操作を実現する。</p>
+</section>
+
+<!-- ====== PIPELINE ====== -->
+<section>
+  <h2>コンパイルパイプライン</h2>
+
+  <div class="pipeline">
+    <div class="pipe-node">
+      <div class="icon">📄</div>
+      <div class="label">C Source</div>
+      <div class="ext">.c</div>
+    </div>
+    <div class="pipe-arrow">
+      <span style="position:relative; top:-2px;">→</span>
+      <div style="font-size:0.35em; color:var(--orange);">clang -S -emit-llvm</div>
+    </div>
+    <div class="pipe-node">
+      <div class="icon">🔤</div>
+      <div class="label">LLVM IR</div>
+      <div class="ext">.ll</div>
+    </div>
+    <div class="pipe-arrow">
+      <span style="position:relative; top:-2px;">→</span>
+      <div style="font-size:0.35em; color:var(--orange);">parser.rb</div>
+    </div>
+    <div class="pipe-node">
+      <div class="icon">🌳</div>
+      <div class="label">IR Nodes</div>
+      <div class="ext">Function / BB / Inst</div>
+    </div>
+    <div class="pipe-arrow">
+      <span style="position:relative; top:-2px;">→</span>
+      <div style="font-size:0.35em; color:var(--orange);">lowering.rb</div>
+    </div>
+    <div class="pipe-node">
+      <div class="icon">⚙️</div>
+      <div class="label">Pseudo-Ops</div>
+      <div class="ext">P_ADD / P_SUB / ...</div>
+    </div>
+    <div class="pipe-arrow">
+      <span style="position:relative; top:-2px;">→</span>
+      <div style="font-size:0.35em; color:var(--orange);">expander.rb</div>
+    </div>
+    <div class="pipe-node">
+      <div class="icon">🎯</div>
+      <div class="label">SUBNEG4</div>
+      <div class="ext">.s4</div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== ARCHITECTURE ====== -->
+<section>
+  <h2>アーキテクチャ</h2>
+
+  <div class="arch-diagram">
+
+    <div class="arch-stage stage-parser">
+      <div class="arch-header">
+        <span class="stage-num">1</span>
+        Parser &mdash; .ll テキストを構造化データに変換
+        <span class="file-tag">parser.rb + ir_nodes.rb</span>
+      </div>
+      <div class="arch-body">
+        <p>LLVM IR テキストを行単位で正規表現パースし、<code>IRModule</code> &rarr; <code>IRFunction</code> &rarr; <code>BasicBlock</code> &rarr; <code>IRInstruction</code> のツリーを構築。</p>
+        <p>対応: <code>define</code>, 基本ブロックラベル, SSA代入 (<code>%r = opcode ...</code>), void命令 (<code>ret</code>, <code>br</code>, <code>store</code>), <code>phi</code>, <code>switch</code> (複数行), <code>select</code>, キャスト, tail call</p>
+        <div style="margin-top:8px;">
+          <span class="data-label">IRModule</span>
+          <span class="data-label">IRFunction</span>
+          <span class="data-label">BasicBlock</span>
+          <span class="data-label">IRInstruction</span>
+          <span class="data-label">Operand (:var :const :label :global :raw :type)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="down-arrow-row">&#x25BC;</div>
+
+    <div class="arch-stage stage-lower">
+      <div class="arch-header">
+        <span class="stage-num">2</span>
+        Lowering &mdash; IR命令を疑似命令に変換
+        <span class="file-tag">lowering.rb</span>
+      </div>
+      <div class="arch-body">
+        <p>SSA形式のIR命令を、SUBNEG4に近い疑似命令列に変換。最も複雑なフェーズ (1,184行)。</p>
+        <p><strong>主要タスク:</strong> メモリ割当 (alloca/グローバル), SSA変数→名前付き変数, phi節→分岐点コピー挿入, 比較→減算+符号判定, 間接アクセス→ポインタ追跡, 関数呼出→push/pop</p>
+        <div style="margin-top:8px;">
+          <span class="data-label">PSub</span>
+          <span class="data-label">PAdd</span>
+          <span class="data-label">PCp</span>
+          <span class="data-label">PGoto</span>
+          <span class="data-label">PNeg</span>
+          <span class="data-label">PPush</span>
+          <span class="data-label">PPop</span>
+          <span class="data-label">PIndirectLoad</span>
+          <span class="data-label">PIndirectStore</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="down-arrow-row">&#x25BC;</div>
+
+    <div class="arch-stage stage-expand">
+      <div class="arch-header">
+        <span class="stage-num">3</span>
+        Expander &mdash; 疑似命令をSUBNEG4命令に展開
+        <span class="file-tag">expander.rb</span>
+      </div>
+      <div class="arch-body">
+        <p>各疑似命令を1〜3個のSUBNEG4命令に機械的に展開。自己書き換えコードのパターンもここで生成。</p>
+        <p>例: <code>PAdd(a,b,c)</code> &rarr; <code>[a, ZERO, t, NEXT]</code> + <code>[t, b, c, NEXT]</code> (2命令で加算)</p>
+      </div>
+    </div>
+
+    <div class="down-arrow-row">&#x25BC;</div>
+
+    <div class="arch-stage stage-emit">
+      <div class="arch-header">
+        <span class="stage-num">4</span>
+        Emitter &mdash; SUBNEG4 アセンブリテキスト出力
+        <span class="file-tag">emitter.rb</span>
+      </div>
+      <div class="arch-body">
+        <p>データセクション (定数・変数・アドレス参照) + コードセクション (SUBNEG4命令) + スタック領域を出力。<code>subneg4-vue</code> デバッガと互換性のあるフォーマット。</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ====== PSEUDO-OPS EXPANSION TABLE ====== -->
+<section>
+  <h2>疑似命令 → SUBNEG4 展開</h2>
+  <p>すべての計算は「引き算して、結果が負ならジャンプ」の組み合わせで実現される。</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>疑似命令</th>
+        <th>意味</th>
+        <th>SUBNEG4 展開</th>
+        <th>命令数</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>PSub(a, b, c)</code></td>
+        <td>c = b &minus; a</td>
+        <td><code>a, b, c, NEXT</code></td>
+        <td>1</td>
+      </tr>
+      <tr>
+        <td><code>PAdd(a, b, c)</code></td>
+        <td>c = b + a</td>
+        <td><code>a, ZERO, t, NEXT</code><br><code>t, b, c, NEXT</code></td>
+        <td>2</td>
+      </tr>
+      <tr>
+        <td><code>PCp(dst, src)</code></td>
+        <td>dst = src</td>
+        <td><code>ZERO, src, dst, NEXT</code></td>
+        <td>1</td>
+      </tr>
+      <tr>
+        <td><code>PGoto(label)</code></td>
+        <td>無条件ジャンプ</td>
+        <td><code>ZERO, C_n1, t, label</code></td>
+        <td>1</td>
+      </tr>
+      <tr>
+        <td><code>PNeg(val, label)</code></td>
+        <td>val &lt; 0 ならジャンプ</td>
+        <td><code>ZERO, val, t, label</code></td>
+        <td>1</td>
+      </tr>
+      <tr>
+        <td><code>PPush(val)</code></td>
+        <td>スタックに push</td>
+        <td>SP→C書換 + 書込 + SP--</td>
+        <td>3</td>
+      </tr>
+      <tr>
+        <td><code>PPop(dst)</code></td>
+        <td>スタックから pop</td>
+        <td>SP++ + SP→B書換 + 読出</td>
+        <td>3</td>
+      </tr>
+      <tr>
+        <td><code>PIndirectLoad(dst, addr)</code></td>
+        <td>dst = mem[addr]</td>
+        <td>addr→B書換 + 読出</td>
+        <td>2</td>
+      </tr>
+      <tr>
+        <td><code>PIndirectStore(addr, val)</code></td>
+        <td>mem[addr] = val</td>
+        <td>addr→C書換 + 書込</td>
+        <td>2</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====== HOW ADD WORKS ====== -->
+<section>
+  <h2>例: 加算 (a + b) の実現</h2>
+  <p>SUBNEG4 には「引き算」しかないが、<strong>二重の否定</strong>で加算を実現する。</p>
+
+  <div class="io-row">
+    <div class="io-box">
+      <div class="io-label">C Source</div>
+      <div class="io-code">
+        <span class="kw">int</span> c = a + b;
+      </div>
+    </div>
+    <div class="arrow-col">→</div>
+    <div class="io-box">
+      <div class="io-label">LLVM IR</div>
+      <div class="io-code">
+        <span class="var">%c</span> = <span class="kw">add</span> <span class="kw">i32</span> <span class="var">%a</span>, <span class="var">%b</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="io-row">
+    <div class="io-box">
+      <div class="io-label">疑似命令</div>
+      <div class="io-code">
+        PAdd(<span class="var">a</span>, <span class="var">b</span>, <span class="var">c</span>)
+      </div>
+    </div>
+    <div class="arrow-col">→</div>
+    <div class="io-box">
+      <div class="io-label">SUBNEG4 (2命令)</div>
+      <div class="io-code">
+        <span class="cmt">// Step 1: t = 0 - a = -a</span><br>
+        <span class="var">a</span>, <span class="num">ZERO</span>, <span class="var">t</span>, NEXT<br><br>
+        <span class="cmt">// Step 2: c = b - (-a) = b + a</span><br>
+        <span class="var">t</span>, <span class="var">b</span>, <span class="var">c</span>, NEXT
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== MEMORY LAYOUT ====== -->
+<section>
+  <h2>メモリレイアウト</h2>
+  <p>プログラムとデータが同じメモリ空間を共有する (フォン・ノイマン方式)。</p>
+
+  <div class="mem-layout">
+    <div class="mem-row">
+      <div class="mem-addr">0</div>
+      <div class="mem-content">
+        <span class="mem-tag mt-const">ZERO:0</span>
+        <span class="mem-desc">定数ゼロ (加算・コピーの基点)</span>
+      </div>
+    </div>
+    <div class="mem-row">
+      <div class="mem-addr">1..N</div>
+      <div class="mem-content">
+        <span class="mem-tag mt-const">定数プール</span>
+        <span class="mem-desc">C_1, C_n1, C_2, ... (定数値)</span>
+      </div>
+    </div>
+    <div class="mem-row">
+      <div class="mem-addr">N+1..M</div>
+      <div class="mem-content">
+        <span class="mem-tag mt-global">グローバル変数</span>
+        <span class="mem-desc">counter:10, multiplier:3, ...</span>
+      </div>
+    </div>
+    <div class="mem-row">
+      <div class="mem-addr">M+1..P</div>
+      <div class="mem-content">
+        <span class="mem-tag mt-var">変数領域</span>
+        <span class="mem-desc">関数パラメータ, ローカル変数, 一時変数, 配列</span>
+      </div>
+    </div>
+    <div class="mem-row">
+      <div class="mem-addr">P+1..Q</div>
+      <div class="mem-content">
+        <span class="mem-tag mt-code">コードセクション</span>
+        <span class="mem-desc">SUBNEG4 命令列 (4ワード/命令)</span>
+      </div>
+    </div>
+    <div class="mem-row">
+      <div class="mem-addr">Q+1..末尾</div>
+      <div class="mem-content">
+        <span class="mem-tag mt-stack">スタック領域</span>
+        <span class="mem-desc">256ワード (下方成長, SP → stack_top)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== SELF-MODIFYING CODE ====== -->
+<section>
+  <h2>自己書き換えコード</h2>
+  <p>SUBNEG4 にはレジスタもアドレッシングモードもない。間接メモリアクセス (ポインタ参照) は<strong>命令自身を書き換える</strong>ことで実現する。</p>
+
+  <div class="selfmod">
+    <div class="selfmod-title">例: 間接読出 — dst = mem[ptr] (PIndirectLoad)</div>
+    <div class="selfmod-steps">
+      <div class="selfmod-step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div>ptr の値を、次の命令の <strong>B オペランド</strong> に書き込む</div>
+          <div class="step-asm">
+            <span class="num">ZERO</span>, <span class="var">ptr</span>, <span class="lbl">cb:read_b</span>, NEXT
+            <span class="cmt">// read_b のアドレスに ptr の値をコピー</span>
+          </div>
+        </div>
+      </div>
+      <div class="selfmod-step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div>書き換えられた命令を実行 → <strong>B が ptr の指す先を参照</strong></div>
+          <div class="step-asm">
+            <span class="num">ZERO</span>, <span class="lbl">cb:read_b:</span><span class="op">???</span>, <span class="var">dst</span>, NEXT
+            <span class="cmt">// dst = mem[ptr] - 0 = mem[ptr]</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top:16px; font-size:0.85em;">
+      <code>cb:</code> はオペランド B のアドレスを示す「per-operand ラベル」。実行時に step 1 がこのアドレスに値を書き込み、step 2 の命令のソースアドレスが動的に変わる。
+    </p>
+  </div>
+
+  <div class="selfmod">
+    <div class="selfmod-title">例: スタック Push (PPush)</div>
+    <div class="selfmod-steps">
+      <div class="selfmod-step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div>SP の値を、書込命令の <strong>C オペランド</strong> に書き込む</div>
+          <div class="step-asm">
+            ZERO, <span class="var">SP</span>, <span class="lbl">cc:push_c</span>, NEXT
+          </div>
+        </div>
+      </div>
+      <div class="selfmod-step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div>val を mem[SP] に書き込む (C が SP の値に書き換え済み)</div>
+          <div class="step-asm">
+            ZERO, <span class="var">val</span>, <span class="lbl">cc:push_c:</span><span class="op">???</span>, NEXT
+          </div>
+        </div>
+      </div>
+      <div class="selfmod-step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div>SP をデクリメント (スタックは下方成長)</div>
+          <div class="step-asm">
+            <span class="num">C_1</span>, <span class="var">SP</span>, <span class="var">SP</span>, NEXT
+            <span class="cmt">// SP = SP - 1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== FUNCTION CALL ====== -->
+<section>
+  <h2>関数呼出の仕組み</h2>
+  <p>ハードウェアスタックが存在しないため、ソフトウェアスタックと自己書き換えで再帰を実現。</p>
+
+  <div class="svg-container">
+    <svg width="800" height="420" viewBox="0 0 800 420" style="max-width:100%;">
+      <!-- Background -->
+      <rect x="0" y="0" width="800" height="420" fill="none"/>
+
+      <!-- Caller box -->
+      <rect x="20" y="10" width="360" height="400" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <text x="200" y="38" fill="#58a6ff" font-size="16" font-weight="700" text-anchor="middle">呼出側 (Caller)</text>
+
+      <!-- Callee box -->
+      <rect x="420" y="10" width="360" height="400" rx="12" fill="#161b22" stroke="#30363d" stroke-width="2"/>
+      <text x="600" y="38" fill="#bc8cff" font-size="16" font-weight="700" text-anchor="middle">呼出先 (Callee)</text>
+
+      <!-- Step 1: Save state -->
+      <rect x="40" y="56" width="320" height="50" rx="8" fill="rgba(248,81,73,0.08)" stroke="#f85149" stroke-width="1"/>
+      <circle cx="58" cy="81" r="12" fill="rgba(248,81,73,0.2)"/>
+      <text x="58" y="86" fill="#f85149" font-size="12" font-weight="700" text-anchor="middle">1</text>
+      <text x="80" y="76" fill="#c9d1d9" font-size="13" font-weight="600">Push 現在の状態をスタックに保存</text>
+      <text x="80" y="94" fill="#8b949e" font-size="11" font-family="monospace">PUSH(local_vars), PUSH(ret_addr_data)</text>
+
+      <!-- Step 2: Set args -->
+      <rect x="40" y="116" width="320" height="50" rx="8" fill="rgba(88,166,255,0.08)" stroke="#58a6ff" stroke-width="1"/>
+      <circle cx="58" cy="141" r="12" fill="rgba(88,166,255,0.2)"/>
+      <text x="58" y="146" fill="#58a6ff" font-size="12" font-weight="700" text-anchor="middle">2</text>
+      <text x="80" y="136" fill="#c9d1d9" font-size="13" font-weight="600">引数をコピー</text>
+      <text x="80" y="154" fill="#8b949e" font-size="11" font-family="monospace">CP(callee_arg0, val0), CP(callee_arg1, val1)</text>
+
+      <!-- Step 3: Set return address -->
+      <rect x="40" y="176" width="320" height="60" rx="8" fill="rgba(210,153,34,0.08)" stroke="#d29922" stroke-width="1"/>
+      <circle cx="58" cy="206" r="12" fill="rgba(210,153,34,0.2)"/>
+      <text x="58" y="211" fill="#d29922" font-size="12" font-weight="700" text-anchor="middle">3</text>
+      <text x="80" y="196" fill="#c9d1d9" font-size="13" font-weight="600">戻りアドレスを書き換え</text>
+      <text x="80" y="214" fill="#8b949e" font-size="11" font-family="monospace">addr_ret: &amp;return_label</text>
+      <text x="80" y="228" fill="#8b949e" font-size="11" font-family="monospace">CP(callee_ret_d, addr_ret)</text>
+
+      <!-- Step 4: GOTO -->
+      <rect x="40" y="246" width="320" height="40" rx="8" fill="rgba(63,185,80,0.08)" stroke="#3fb950" stroke-width="1"/>
+      <circle cx="58" cy="266" r="12" fill="rgba(63,185,80,0.2)"/>
+      <text x="58" y="271" fill="#3fb950" font-size="12" font-weight="700" text-anchor="middle">4</text>
+      <text x="80" y="271" fill="#c9d1d9" font-size="13" font-weight="600">GOTO callee (ジャンプ)</text>
+
+      <!-- Arrow to callee -->
+      <line x1="360" y1="266" x2="440" y2="100" stroke="#3fb950" stroke-width="2" marker-end="url(#arrowG)"/>
+
+      <!-- Callee: Execute -->
+      <rect x="440" y="76" width="320" height="50" rx="8" fill="rgba(188,140,255,0.08)" stroke="#bc8cff" stroke-width="1"/>
+      <circle cx="458" cy="101" r="12" fill="rgba(188,140,255,0.2)"/>
+      <text x="458" y="106" fill="#bc8cff" font-size="12" font-weight="700" text-anchor="middle">5</text>
+      <text x="480" y="96" fill="#c9d1d9" font-size="13" font-weight="600">関数本体を実行</text>
+      <text x="480" y="112" fill="#8b949e" font-size="11">計算結果を retval に格納</text>
+
+      <!-- Callee: Return -->
+      <rect x="440" y="136" width="320" height="60" rx="8" fill="rgba(188,140,255,0.08)" stroke="#bc8cff" stroke-width="1"/>
+      <circle cx="458" cy="166" r="12" fill="rgba(188,140,255,0.2)"/>
+      <text x="458" y="171" fill="#bc8cff" font-size="12" font-weight="700" text-anchor="middle">6</text>
+      <text x="480" y="156" fill="#c9d1d9" font-size="13" font-weight="600">Return (自己書換でジャンプ)</text>
+      <text x="480" y="174" fill="#8b949e" font-size="11" font-family="monospace">ZERO, C_n1, t, cd:ret_d:???</text>
+      <text x="480" y="188" fill="#8b949e" font-size="11">D が Step 3 で書き換え済み → caller へ戻る</text>
+
+      <!-- Arrow back -->
+      <line x1="440" y1="196" x2="360" y2="310" stroke="#bc8cff" stroke-width="2" marker-end="url(#arrowP)"/>
+
+      <!-- Step 7: Restore -->
+      <rect x="40" y="296" width="320" height="50" rx="8" fill="rgba(248,81,73,0.08)" stroke="#f85149" stroke-width="1"/>
+      <circle cx="58" cy="321" r="12" fill="rgba(248,81,73,0.2)"/>
+      <text x="58" y="326" fill="#f85149" font-size="12" font-weight="700" text-anchor="middle">7</text>
+      <text x="80" y="316" fill="#c9d1d9" font-size="13" font-weight="600">Pop スタックから状態復帰</text>
+      <text x="80" y="334" fill="#8b949e" font-size="11" font-family="monospace">POP(local_vars) — スタックから復元</text>
+
+      <!-- Step 8: Use retval -->
+      <rect x="40" y="356" width="320" height="40" rx="8" fill="rgba(63,185,80,0.08)" stroke="#3fb950" stroke-width="1"/>
+      <circle cx="58" cy="376" r="12" fill="rgba(63,185,80,0.2)"/>
+      <text x="58" y="381" fill="#3fb950" font-size="12" font-weight="700" text-anchor="middle">8</text>
+      <text x="80" y="381" fill="#c9d1d9" font-size="13" font-weight="600">CP(result, callee_retval) — 戻り値取得</text>
+
+      <!-- Callee side restore -->
+      <rect x="440" y="300" width="320" height="100" rx="8" fill="rgba(88,166,255,0.04)" stroke="#30363d" stroke-width="1" stroke-dasharray="4"/>
+      <text x="460" y="324" fill="#8b949e" font-size="12">再帰呼出しでは、引数・ローカル変数・</text>
+      <text x="460" y="342" fill="#8b949e" font-size="12">戻りアドレスがスタックに保存されるため、</text>
+      <text x="460" y="360" fill="#8b949e" font-size="12">各呼出しの状態が独立に保たれる。</text>
+      <text x="460" y="386" fill="#d29922" font-size="12" font-weight="600">→ 再帰 fib(10), factorial(6), hanoi(4) 動作確認済</text>
+
+      <!-- Arrow markers -->
+      <defs>
+        <marker id="arrowG" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M 0 0 L 8 4 L 0 8 Z" fill="#3fb950"/>
+        </marker>
+        <marker id="arrowP" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M 0 0 L 8 4 L 0 8 Z" fill="#bc8cff"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+</section>
+
+<!-- ====== PHI NODE LOWERING ====== -->
+<section>
+  <h2>Phi 節の変換</h2>
+  <p>LLVM IR の SSA 形式では、合流点で <code>phi</code> 命令が異なるパスの値を選択する。S4C では phi を分岐点でのコピー命令に変換する。</p>
+
+  <div class="io-row">
+    <div class="io-box">
+      <div class="io-label">LLVM IR (SSA形式)</div>
+      <div class="io-code">
+        <span class="lbl">loop:</span><br>
+        &nbsp;&nbsp;<span class="var">%i</span> = <span class="kw">phi</span> i32 [<span class="num">0</span>, <span class="lbl">%entry</span>], [<span class="var">%i.next</span>, <span class="lbl">%loop</span>]<br>
+        &nbsp;&nbsp;<span class="var">%sum</span> = <span class="kw">phi</span> i32 [<span class="num">0</span>, <span class="lbl">%entry</span>], [<span class="var">%sum.new</span>, <span class="lbl">%loop</span>]<br>
+        &nbsp;&nbsp;...
+      </div>
+    </div>
+    <div class="arrow-col">→</div>
+    <div class="io-box">
+      <div class="io-label">S4C の変換結果</div>
+      <div class="io-code">
+        <span class="cmt">// entry → loop の分岐前:</span><br>
+        CP(<span class="var">i</span>, <span class="num">0</span>)<br>
+        CP(<span class="var">sum</span>, <span class="num">0</span>)<br>
+        GOTO <span class="lbl">loop</span><br><br>
+        <span class="cmt">// loop → loop のバックエッジ前:</span><br>
+        CP(<span class="var">i</span>, <span class="var">i_next</span>)<br>
+        CP(<span class="var">sum</span>, <span class="var">sum_new</span>)<br>
+        GOTO <span class="lbl">loop</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== IR INSTRUCTION MAPPING ====== -->
+<section>
+  <h2>IR 命令 → 疑似命令マッピング</h2>
+
+  <table>
+    <thead>
+      <tr><th>LLVM IR</th><th>疑似命令</th><th>備考</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>%r = add i32 %a, %b</code></td>
+        <td><code>PAdd(a, b, r)</code></td>
+        <td>2命令 (否定して引く)</td>
+      </tr>
+      <tr>
+        <td><code>%r = sub i32 %a, %b</code></td>
+        <td><code>PSub(a, b, r)</code></td>
+        <td>1命令 (直接)</td>
+      </tr>
+      <tr>
+        <td><code>%r = mul i32 %a, %b</code></td>
+        <td><code>call __mul</code></td>
+        <td>ループ加算サブルーチン</td>
+      </tr>
+      <tr>
+        <td><code>%r = sdiv i32 %a, %b</code></td>
+        <td><code>call __sdiv</code></td>
+        <td>ループ減算サブルーチン</td>
+      </tr>
+      <tr>
+        <td><code>%r = and/or/xor i32 %a, %b</code></td>
+        <td><code>call __and/__or/__xor</code></td>
+        <td>32回ループ (ビット単位)</td>
+      </tr>
+      <tr>
+        <td><code>%r = shl/ashr i32 %a, %b</code></td>
+        <td><code>call __shl/__shr</code></td>
+        <td>ループ 2倍/2分の1</td>
+      </tr>
+      <tr>
+        <td><code>%r = icmp slt i32 %a, %b</code></td>
+        <td><code>PSub(a, b, t)</code> + 符号判定</td>
+        <td>b-a &lt; 0 なら true</td>
+      </tr>
+      <tr>
+        <td><code>br i1 %c, label %T, %F</code></td>
+        <td><code>PNeg(c, T)</code> + <code>PGoto(F)</code></td>
+        <td>c &lt; 0 なら T, else F</td>
+      </tr>
+      <tr>
+        <td><code>br label %L</code></td>
+        <td><code>PGoto(L)</code></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td><code>ret i32 %v</code></td>
+        <td><code>PCp(retval, v)</code> + <code>PReturnJump</code></td>
+        <td>自己書換 D で戻る</td>
+      </tr>
+      <tr>
+        <td><code>%r = alloca i32</code></td>
+        <td>(データ割当)</td>
+        <td>データセクションに変数確保</td>
+      </tr>
+      <tr>
+        <td><code>%r = load i32, ptr %p</code></td>
+        <td><code>PCp</code> or <code>PIndirectLoad</code></td>
+        <td>ポインタなら間接読出</td>
+      </tr>
+      <tr>
+        <td><code>store i32 %v, ptr %p</code></td>
+        <td><code>PCp</code> or <code>PIndirectStore</code></td>
+        <td>ポインタなら間接書込</td>
+      </tr>
+      <tr>
+        <td><code>getelementptr %base, i</code></td>
+        <td><code>PAdd(&amp;base, index, ptr)</code></td>
+        <td>変数インデックス: アドレス計算</td>
+      </tr>
+      <tr>
+        <td><code>call @func(%a, %b)</code></td>
+        <td>Push + CP args + SetReturn + Goto</td>
+        <td>スタックフレーム管理</td>
+      </tr>
+      <tr>
+        <td><code>switch i32 %v, [...]</code></td>
+        <td>連鎖 icmp eq + 分岐</td>
+        <td>各 case を順に比較</td>
+      </tr>
+      <tr>
+        <td><code>select i1 %c, %a, %b</code></td>
+        <td><code>PNeg</code> + 条件分岐コピー</td>
+        <td>三項演算子相当</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====== BUILT-IN SUBROUTINES ====== -->
+<section>
+  <h2>組み込みサブルーチン</h2>
+  <p>SUBNEG4 には乗算・ビット演算命令がないため、ループで実装するサブルーチンが自動生成される。</p>
+
+  <div class="expand-card open" onclick="this.classList.toggle('open')">
+    <div class="expand-header">
+      <span class="expand-toggle">&#x25B6;</span>
+      <code>__mul(a, b) → result</code> &mdash; 乗算 (繰り返し加算)
+    </div>
+    <div class="expand-body">
+      <pre><span class="cmt">// result = 0</span>
+<span class="cmt">// while b > 0:</span>
+<span class="cmt">//   result += a</span>
+<span class="cmt">//   b -= 1</span>
+<span class="cmt">// 負数処理: b < 0 の場合は符号反転して最後にnegate</span></pre>
+    </div>
+  </div>
+
+  <div class="expand-card" onclick="this.classList.toggle('open')">
+    <div class="expand-header">
+      <span class="expand-toggle">&#x25B6;</span>
+      <code>__and(a, b) → result</code> &mdash; ビットAND (32回ループ)
+    </div>
+    <div class="expand-body">
+      <pre><span class="cmt">// result = 0, bit = 1</span>
+<span class="cmt">// 32.times do:</span>
+<span class="cmt">//   a_bit = a - (a/2)*2  (最下位ビット)</span>
+<span class="cmt">//   b_bit = b - (b/2)*2</span>
+<span class="cmt">//   if a_bit == 1 && b_bit == 1:</span>
+<span class="cmt">//     result += bit</span>
+<span class="cmt">//   a >>= 1, b >>= 1, bit <<= 1</span></pre>
+    </div>
+  </div>
+
+  <div class="expand-card" onclick="this.classList.toggle('open')">
+    <div class="expand-header">
+      <span class="expand-toggle">&#x25B6;</span>
+      <code>__shl(a, n) → result</code> &mdash; 左シフト (n回ループ)
+    </div>
+    <div class="expand-body">
+      <pre><span class="cmt">// result = a</span>
+<span class="cmt">// n.times do:</span>
+<span class="cmt">//   result = result + result  (= result * 2)</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ====== COMPLETE EXAMPLE ====== -->
+<section>
+  <h2>完全な変換例: add(3, 5)</h2>
+
+  <h3>C Source</h3>
+  <pre><span class="kw">int</span> <span class="fn">add</span>(<span class="kw">int</span> <span class="var">a</span>, <span class="kw">int</span> <span class="var">b</span>) {
+    <span class="kw">return</span> <span class="var">a</span> + <span class="var">b</span>;
+}
+<span class="kw">int</span> <span class="fn">main</span>() {
+    <span class="kw">return</span> <span class="fn">add</span>(<span class="num">3</span>, <span class="num">5</span>);
+}</pre>
+
+  <h3>LLVM IR (.ll)</h3>
+  <pre><span class="kw">define</span> <span class="kw">i32</span> <span class="fn">@add</span>(<span class="kw">i32</span> <span class="var">%0</span>, <span class="kw">i32</span> <span class="var">%1</span>) {
+  <span class="var">%3</span> = <span class="fn">alloca</span> <span class="kw">i32</span>       <span class="cmt">; a</span>
+  <span class="var">%4</span> = <span class="fn">alloca</span> <span class="kw">i32</span>       <span class="cmt">; b</span>
+  <span class="kw">store</span> <span class="kw">i32</span> <span class="var">%0</span>, <span class="kw">ptr</span> <span class="var">%3</span>
+  <span class="kw">store</span> <span class="kw">i32</span> <span class="var">%1</span>, <span class="kw">ptr</span> <span class="var">%4</span>
+  <span class="var">%5</span> = <span class="kw">load</span> <span class="kw">i32</span>, <span class="kw">ptr</span> <span class="var">%3</span>
+  <span class="var">%6</span> = <span class="kw">load</span> <span class="kw">i32</span>, <span class="kw">ptr</span> <span class="var">%4</span>
+  <span class="var">%7</span> = <span class="kw">add</span> <span class="kw">i32</span> <span class="var">%5</span>, <span class="var">%6</span>
+  <span class="kw">ret</span> <span class="kw">i32</span> <span class="var">%7</span>
+}</pre>
+
+  <h3>SUBNEG4 Assembly (出力)</h3>
+  <pre><span class="cmt">// === Data Section ===</span>
+<span class="var">ZERO</span>:<span class="num">0</span>
+<span class="var">C_n1</span>:<span class="num">-1</span>
+<span class="var">add_arg_0</span>:<span class="num">0</span>            <span class="cmt">// 引数 a</span>
+<span class="var">add_arg_1</span>:<span class="num">0</span>            <span class="cmt">// 引数 b</span>
+<span class="var">add___retval</span>:<span class="num">0</span>         <span class="cmt">// 戻り値</span>
+<span class="var">add_7</span>:<span class="num">0</span>                <span class="cmt">// a + b の結果</span>
+<span class="var">t0</span>:<span class="num">0</span>                   <span class="cmt">// 一時変数</span>
+...
+
+<span class="cmt">// === Code Section ===</span>
+<span class="cmt">// add: %7 = add %5, %6</span>
+<span class="lbl">add:</span><span class="var">add_arg_0</span>, <span class="var">ZERO</span>, <span class="var">t0</span>, NEXT   <span class="cmt">// t0 = -a</span>
+<span class="var">t0</span>, <span class="var">add_arg_1</span>, <span class="var">add_7</span>, NEXT      <span class="cmt">// add_7 = b - (-a) = a + b</span>
+
+<span class="cmt">// ret i32 %7</span>
+<span class="var">ZERO</span>, <span class="var">add_7</span>, <span class="var">add___retval</span>, NEXT <span class="cmt">// retval = a + b</span>
+<span class="var">ZERO</span>, <span class="var">C_n1</span>, <span class="var">t1</span>, cd:<span class="lbl">add_ret_d</span>:<span class="num">0</span> <span class="cmt">// return (D = caller が設定)</span></pre>
+</section>
+
+<!-- ====== TEST RESULTS ====== -->
+<section>
+  <h2>テスト結果 (24/24 pass)</h2>
+
+  <div class="test-grid">
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">simple_add</div>
+        <div class="test-desc">3 + 5</div>
+      </div>
+      <div class="test-result">= 8</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">mul</div>
+        <div class="test-desc">7 &times; 8</div>
+      </div>
+      <div class="test-result">= 56</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">fib</div>
+        <div class="test-desc">fib(10) recursive</div>
+      </div>
+      <div class="test-result">= 55</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">fib_o1</div>
+        <div class="test-desc">fib(10) -O1 tail call</div>
+      </div>
+      <div class="test-result">= 55</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">max</div>
+        <div class="test-desc">max(7, 3)</div>
+      </div>
+      <div class="test-result">= 7</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">loop_sum</div>
+        <div class="test-desc">&sum;(1..10)</div>
+      </div>
+      <div class="test-result">= 55</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">call</div>
+        <div class="test-desc">add(3, 5)</div>
+      </div>
+      <div class="test-result">= 8</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">array</div>
+        <div class="test-desc">10+20+30</div>
+      </div>
+      <div class="test-result">= 60</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">eq_test</div>
+        <div class="test-desc">a==b &rarr; 42</div>
+      </div>
+      <div class="test-result">= 42</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">factorial</div>
+        <div class="test-desc">6!</div>
+      </div>
+      <div class="test-result">= 720</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">shift</div>
+        <div class="test-desc">(5&lt;&lt;3) + 25</div>
+      </div>
+      <div class="test-result">= 65</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">bitwise</div>
+        <div class="test-desc">0xAB &amp;|^ 0x0F</div>
+      </div>
+      <div class="test-result">= 350</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">gcd</div>
+        <div class="test-desc">gcd(48, 18)</div>
+      </div>
+      <div class="test-result">= 6</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">collatz</div>
+        <div class="test-desc">collatz(27) -O0</div>
+      </div>
+      <div class="test-result">= 111</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">collatz_o1</div>
+        <div class="test-desc">collatz(27) -O1</div>
+      </div>
+      <div class="test-result">= 111</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">array_sum</div>
+        <div class="test-desc">変数index配列合計</div>
+      </div>
+      <div class="test-result">= 150</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">bubble_sort</div>
+        <div class="test-desc">5要素バブルソート</div>
+      </div>
+      <div class="test-result">= 60</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">global</div>
+        <div class="test-desc">グローバル変数</div>
+      </div>
+      <div class="test-result">= 30</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">array_func</div>
+        <div class="test-desc">配列を関数に渡す</div>
+      </div>
+      <div class="test-result">= 1000</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">matmul</div>
+        <div class="test-desc">2&times;2行列積</div>
+      </div>
+      <div class="test-result">= 134</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">sieve</div>
+        <div class="test-desc">素数 &le;30 個数</div>
+      </div>
+      <div class="test-result">= 10</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">phi_test</div>
+        <div class="test-desc">min(7,3)+min(2,9)</div>
+      </div>
+      <div class="test-result">= 5</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">hanoi</div>
+        <div class="test-desc">ハノイの塔 4段</div>
+      </div>
+      <div class="test-result">= 15</div>
+    </div>
+    <div class="test-card">
+      <div class="test-check">&#x2713;</div>
+      <div class="test-info">
+        <div class="test-name">switch_test</div>
+        <div class="test-desc">switch文 classify</div>
+      </div>
+      <div class="test-result">= 89</div>
+    </div>
+  </div>
+</section>
+
+<!-- ====== FILE STRUCTURE ====== -->
+<section>
+  <h2>ファイル構成</h2>
+  <table>
+    <thead>
+      <tr><th>ファイル</th><th>行数</th><th>役割</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>lib/parser.rb</code></td><td>343</td><td>.ll テキスト → IR ノード (正規表現パース)</td></tr>
+      <tr><td><code>lib/ir_nodes.rb</code></td><td>103</td><td>IR データ構造 (Module, Function, BB, Instruction, Operand)</td></tr>
+      <tr><td><code>lib/lowering.rb</code></td><td>1,184</td><td>IR命令 → 疑似命令変換 (最大・最複雑モジュール)</td></tr>
+      <tr><td><code>lib/pseudo_ops.rb</code></td><td>194</td><td>疑似命令クラス定義 (PSub, PAdd, PPush, ...)</td></tr>
+      <tr><td><code>lib/expander.rb</code></td><td>177</td><td>疑似命令 → SUBNEG4 命令展開</td></tr>
+      <tr><td><code>lib/memory.rb</code></td><td>168</td><td>変数・定数・配列のメモリ割当管理</td></tr>
+      <tr><td><code>lib/emitter.rb</code></td><td>118</td><td>SUBNEG4 アセンブリテキスト出力</td></tr>
+      <tr><td><code>test/test_e2e.rb</code></td><td>380</td><td>E2E テスト + SUBNEG4 シミュレータ</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ====== LIMITATIONS ====== -->
+<section>
+  <h2>既知の制限</h2>
+  <table>
+    <thead>
+      <tr><th>項目</th><th>状態</th><th>備考</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>符号なし比較 (ult, ugt, ...)</td><td style="color:var(--red);">未対応</td><td>slt/sgt/eq/ne のみ</td></tr>
+      <tr><td>浮動小数点数</td><td style="color:var(--red);">未対応</td><td>整数演算のみ</td></tr>
+      <tr><td>構造体 (struct)</td><td style="color:var(--red);">未対応</td><td>配列は対応済み</td></tr>
+      <tr><td>文字列 / i8 型</td><td style="color:var(--red);">未対応</td><td>すべてワード (i32) 単位</td></tr>
+      <tr><td>可変長引数</td><td style="color:var(--red);">未対応</td><td></td></tr>
+      <tr><td>乗除算の速度</td><td style="color:var(--orange);">低速</td><td>ループ実装 (O(n) サイクル)</td></tr>
+      <tr><td>ビット演算の速度</td><td style="color:var(--orange);">低速</td><td>32回ループ (固定)</td></tr>
+      <tr><td>-O2 以上の最適化</td><td style="color:var(--orange);">部分対応</td><td>-O0, -O1 は動作確認済み</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<footer>
+  S4C &mdash; LLVM IR to SUBNEG4 Compiler &mdash; Ruby &mdash; 24 tests passing
+</footer>
+
+<script>
+// Toggle expandable cards
+document.querySelectorAll('.expand-card').forEach(card => {
+  card.addEventListener('click', () => card.classList.toggle('open'));
+});
+</script>
+
+</body>
+</html>
