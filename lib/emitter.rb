@@ -104,7 +104,7 @@ module S4C
       lines.join("\n") + "\n"
     end
 
-    STACK_SIZE = 256
+    STACK_SIZE = 4096
 
     private
 
