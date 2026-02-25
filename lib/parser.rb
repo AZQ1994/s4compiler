@@ -13,8 +13,8 @@ module S4C
       while i < lines.length
         line = lines[i]
 
-        # Global variable declaration: @name = global i32 VALUE, align N
-        if line =~ /^@([\w.]+)\s*=\s*(?:dso_local\s+)?(?:global|constant)\s+(\w+)\s+(-?\d+)/
+        # Global variable declaration: @name = [common] [dso_local] global i32 VALUE, align N
+        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak)\s+)*(?:global|constant)\s+(\w+)\s+(-?\d+)/
           name = $1
           type = $2
           value = $3.to_i

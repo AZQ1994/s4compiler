@@ -345,4 +345,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 5, sim.read_label('main___retval')
   end
+
+  def test_hanoi
+    # Tower of Hanoi: 4 disks → 2^4-1 = 15 moves (deep recursion with 4 params)
+    sim, result, _ = compile_and_run(fixture('hanoi.ll'), max_cycles: 100_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 15, sim.read_label('main___retval')
+  end
 end
