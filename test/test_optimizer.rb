@@ -322,6 +322,271 @@ class TestOptimizer < Minitest::Test
     assert result.any? { |op| op.is_a?(S4C::PCp) && op.dst == arr0 }
   end
 
+  # ── StrengthReduction ───────────────────────────────────────────
+
+  def test_strength_add_zero_left
+    x = @mem.func_var("f", "x")
+    z = @mem.zero
+    ops = [
+      S4C::PAdd.new(z, x, retval),  # retval = x + 0 = x
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PAdd) }
+    copies = result.select { |op| op.is_a?(S4C::PCp) }
+    assert_equal 1, copies.length
+    assert_equal x, copies[0].src
+  end
+
+  def test_strength_add_zero_right
+    x = @mem.func_var("f", "x")
+    z = @mem.zero
+    ops = [
+      S4C::PAdd.new(x, z, retval),  # retval = 0 + x = x
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PAdd) }
+    copies = result.select { |op| op.is_a?(S4C::PCp) }
+    assert_equal 1, copies.length
+    assert_equal x, copies[0].src
+  end
+
+  def test_strength_sub_zero_identity
+    # PSub(ZERO, x, c) → c = x - 0 = x → PCp(c, x)
+    x = @mem.func_var("f", "x")
+    z = @mem.zero
+    ops = [
+      S4C::PSub.new(z, x, retval),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PSub) }
+    copies = result.select { |op| op.is_a?(S4C::PCp) }
+    assert_equal 1, copies.length
+    assert_equal x, copies[0].src
+  end
+
+  def test_strength_sub_self
+    # PSub(x, x, c) → c = x - x = 0
+    x = @mem.func_var("f", "x")
+    z = @mem.zero
+    ops = [
+      S4C::PSub.new(x, x, retval),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PSub) }
+    copies = result.select { |op| op.is_a?(S4C::PCp) }
+    assert_equal 1, copies.length
+    assert_equal z, copies[0].src
+  end
+
+  def test_strength_negation_preserved
+    # PSub(x, ZERO, c) = c = 0 - x = -x → NOT identity, keep as PSub
+    x = @mem.func_var("f", "x")
+    z = @mem.zero
+    ops = [
+      S4C::PSub.new(x, z, retval),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PSub) }
+  end
+
+  def test_strength_no_change_for_nonzero
+    x = @mem.func_var("f", "x")
+    y = @mem.func_var("f", "y")
+    ops = [
+      S4C::PAdd.new(x, y, retval),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PAdd) }
+  end
+
+  # ── DeadLabelElimination ───────────────────────────────────────
+
+  def test_dead_label_removed
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+      S4C::PLabel.new("orphan"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PLabel) && op.name == "orphan" }
+  end
+
+  def test_dead_label_keeps_referenced
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PNeg.new(x, "target"),      # conditional branch keeps "target" referenced
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+      S4C::PLabel.new("target"),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PLabel) && op.name == "target" }
+  end
+
+  def test_dead_label_keeps_first
+    ops = [
+      S4C::PLabel.new("func_main"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PLabel) && op.name == "func_main" }
+  end
+
+  def test_dead_label_keeps_neg_target
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PNeg.new(x, "negative_path"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+      S4C::PLabel.new("negative_path"),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PLabel) && op.name == "negative_path" }
+  end
+
+  # ── GotoChainSimplification ────────────────────────────────────
+
+  def test_goto_chain_collapsed
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PGoto.new("L1"),
+      S4C::PLabel.new("L1"),
+      S4C::PGoto.new("L2"),
+      S4C::PLabel.new("L2"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # After chain simplification, no goto should target L1
+    refute result.any? { |op| op.is_a?(S4C::PGoto) && op.label == "L1" }
+  end
+
+  def test_goto_chain_transitive
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PGoto.new("L1"),
+      S4C::PLabel.new("L1"),
+      S4C::PGoto.new("L2"),
+      S4C::PLabel.new("L2"),
+      S4C::PGoto.new("L3"),
+      S4C::PLabel.new("L3"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PGoto) && op.label == "L1" }
+    refute result.any? { |op| op.is_a?(S4C::PGoto) && op.label == "L2" }
+  end
+
+  def test_goto_chain_neg_target
+    # PNeg target "L1" → PGoto("final") should redirect PNeg to "final"
+    # Use separate labels to prevent GotoNextElimination from interfering
+    x = @mem.func_var("f", "x")
+    y = @mem.func_var("f", "y")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PNeg.new(x, "L1"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+      S4C::PLabel.new("L1"),
+      S4C::PGoto.new("final"),
+      S4C::PLabel.new("mid"),            # different label between goto and final
+      S4C::PCp.new(y, @mem.zero),        # some code
+      S4C::PHalt.new,
+      S4C::PLabel.new("final"),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    negs = result.select { |op| op.is_a?(S4C::PNeg) }
+    if negs.any?
+      assert_equal "final", negs[0].label
+    end
+  end
+
+  def test_goto_chain_cycle_safe
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PNeg.new(x, "done"),
+      S4C::PGoto.new("L1"),
+      S4C::PLabel.new("L1"),
+      S4C::PGoto.new("L2"),
+      S4C::PLabel.new("L2"),
+      S4C::PGoto.new("L1"),
+      S4C::PLabel.new("done"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PHalt) }
+  end
+
+  # ── Combined: new passes interact with existing ────────────────
+
+  def test_strength_enables_copy_prop
+    x = @mem.func_var("f", "x")
+    t = @mem.func_var("f", "t")
+    z = @mem.zero
+    ops = [
+      S4C::PSub.new(z, x, t),     # t = x - 0 = x → PCp(t, x)
+      S4C::PCp.new(retval, t),    # retval = t → retval = x
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    copies = result.select { |op| op.is_a?(S4C::PCp) }
+    assert_equal 1, copies.length
+    assert_equal retval, copies[0].dst
+    assert_equal x, copies[0].src
+  end
+
+  def test_dead_label_after_unreachable
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PLabel.new("entry"),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+      S4C::PGoto.new("orphan_target"),   # unreachable
+      S4C::PLabel.new("orphan_target"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PLabel) && op.name == "orphan_target" }
+  end
+
   # ── Combined optimization ───────────────────────────────────────
 
   def test_alloca_load_store_chain

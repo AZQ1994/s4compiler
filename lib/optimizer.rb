@@ -5,7 +5,8 @@ require 'set'
 
 module S4C
   # Optimizes pseudo-op sequences between Lowering and Expander.
-  # Runs iterative passes: GotoNext, Unreachable, ConstFold, CopyProp, DeadStore.
+  # Runs iterative passes: GotoNext, GotoChain, Unreachable, DeadLabel,
+  # ConstFold, StrengthRed, CopyProp, DeadStore.
   class Optimizer
     attr_reader :stats
 
@@ -26,8 +27,11 @@ module S4C
         @stats[:iterations] = i + 1
         changed = false
         changed |= goto_next_elimination
+        changed |= goto_chain_simplification
         changed |= unreachable_code_elimination
+        changed |= dead_label_elimination
         changed |= constant_folding
+        changed |= strength_reduction
         changed |= copy_propagation
         changed |= dead_store_elimination
         break unless changed
@@ -124,7 +128,70 @@ module S4C
       changed
     end
 
-    # ── Pass 2: UnreachableCodeElimination ────────────────────────────
+    # ── Pass 2: GotoChainSimplification ────────────────────────────────
+    # If label L is immediately followed by PGoto(L2) (skipping consecutive labels),
+    # redirect all PGoto(L) and PNeg(_, L) to L2. Resolves chains transitively.
+
+    def goto_chain_simplification
+      # Build redirect map: label → goto target (only if label's first real op is PGoto)
+      redirect = {}
+      i = 0
+      while i < @ops.length
+        if @ops[i].is_a?(PLabel)
+          label_name = @ops[i].name
+          j = i + 1
+          j += 1 while j < @ops.length && @ops[j].is_a?(PLabel)
+          if j < @ops.length && @ops[j].is_a?(PGoto)
+            redirect[label_name] = @ops[j].label
+          end
+        end
+        i += 1
+      end
+
+      return false if redirect.empty?
+
+      # Resolve transitive chains with cycle detection
+      redirect.each_key do |label|
+        visited = Set.new
+        current = label
+        while redirect[current] && !visited.include?(current)
+          visited << current
+          current = redirect[current]
+        end
+        redirect[label] = visited.include?(current) ? label : current
+      end
+
+      # Remove self-redirects
+      redirect.delete_if { |k, v| k == v }
+      return false if redirect.empty?
+
+      changed = false
+      @ops = @ops.map do |op|
+        case op
+        when PGoto
+          target = redirect[op.label]
+          if target
+            changed = true
+            PGoto.new(target, comment: op.comment)
+          else
+            op
+          end
+        when PNeg
+          target = redirect[op.label]
+          if target
+            changed = true
+            PNeg.new(op.val, target, comment: op.comment)
+          else
+            op
+          end
+        else
+          op
+        end
+      end
+      changed
+    end
+
+    # ── Pass 3: UnreachableCodeElimination ────────────────────────────
 
     def unreachable_code_elimination
       changed = false
@@ -149,7 +216,36 @@ module S4C
       changed
     end
 
-    # ── Pass 3: ConstantFolding ───────────────────────────────────────
+    # ── Pass 4: DeadLabelElimination ────────────────────────────────────
+    # Remove PLabel ops not referenced by any PGoto, PNeg, or PCallSetReturn.
+
+    def dead_label_elimination
+      referenced = Set.new
+      @ops.each do |op|
+        case op
+        when PGoto then referenced << op.label
+        when PNeg  then referenced << op.label
+        when PCallSetReturn then referenced << op.return_label
+        end
+      end
+
+      first_label = @ops.find { |op| op.is_a?(PLabel) }
+
+      changed = false
+      result = @ops.select do |op|
+        if op.is_a?(PLabel) && op != first_label && !referenced.include?(op.name)
+          changed = true
+          false
+        else
+          true
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
+    # ── Pass 5: ConstantFolding ───────────────────────────────────────
     # Only folds operations where BOTH operands are true constants
     # (from memory.constants). Does NOT propagate constants through copies
     # to avoid unsoundness across control flow boundaries.
@@ -210,7 +306,51 @@ module S4C
       changed
     end
 
-    # ── Pass 4: CopyPropagation ───────────────────────────────────────
+    # ── Pass 6: StrengthReduction ──────────────────────────────────────
+    # Replace arithmetic with zero operands with cheaper PCp ops.
+
+    def strength_reduction
+      changed = false
+      const_map = build_constant_map
+      zero_labels = Set.new
+      const_map.each { |label, val| zero_labels << label if val == 0 }
+
+      result = @ops.map do |op|
+        case op
+        when PAdd
+          if zero_labels.include?(op.a)
+            # PAdd(ZERO, x, c) → c = x + 0 = x
+            changed = true
+            PCp.new(op.c, op.b, comment: op.comment)
+          elsif zero_labels.include?(op.b)
+            # PAdd(x, ZERO, c) → c = 0 + x = x
+            changed = true
+            PCp.new(op.c, op.a, comment: op.comment)
+          else
+            op
+          end
+        when PSub
+          if zero_labels.include?(op.a)
+            # PSub(ZERO, x, c) → c = x - 0 = x
+            changed = true
+            PCp.new(op.c, op.b, comment: op.comment)
+          elsif op.a == op.b
+            # PSub(x, x, c) → c = x - x = 0
+            changed = true
+            PCp.new(op.c, @mem.zero, comment: op.comment)
+          else
+            op
+          end
+        else
+          op
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
+    # ── Pass 7: CopyPropagation ───────────────────────────────────────
     # Single-pass forward substitution within straight-line blocks.
     # Resets substitution map at PLabel and barrier boundaries.
 
@@ -310,7 +450,7 @@ module S4C
       end
     end
 
-    # ── Pass 5: DeadStoreElimination ──────────────────────────────────
+    # ── Pass 8: DeadStoreElimination ──────────────────────────────────
 
     def dead_store_elimination
       # Build global set of all variables that are ever read
