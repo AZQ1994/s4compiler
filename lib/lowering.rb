@@ -88,10 +88,30 @@ module S4C
     def lower_function(func)
       @current_func = func.name
 
+      # Pre-scan: collect phi nodes and build mapping
+      # @phi_copies["target_block"]["source_block"] = [[phi_result, value], ...]
+      @phi_copies = {}
+      func.blocks.each do |block|
+        block.instructions.each do |inst|
+          next unless inst.opcode == 'phi'
+          # Pre-allocate the phi result variable
+          fvar(inst.result)
+          # Operands: [value0, label0, value1, label1, ...]
+          inst.operands.each_slice(2) do |val_op, bb_op|
+            next unless bb_op&.label?
+            src_block = bb_op.value
+            @phi_copies[block.name] ||= {}
+            @phi_copies[block.name][src_block] ||= []
+            @phi_copies[block.name][src_block] << [inst.result, val_op]
+          end
+        end
+      end
+
       emit PLabel.new("func_#{func.name}", comment: "function #{func.name}")
 
       # Process each basic block
       func.blocks.each do |block|
+        @current_block = block.name
         emit PLabel.new(bb_label(block.name), comment: "#{func.name}::#{block.name}")
 
         block.instructions.each do |inst|
@@ -689,14 +709,43 @@ module S4C
     # br label %L / br i1 %c, label %T, label %F
     def lower_br(inst)
       if inst.operands.length == 1
-        label = bb_label(inst.operands[0].value)
-        emit PGoto.new(label, comment: "goto #{inst.operands[0].value}")
+        target = inst.operands[0].value
+        emit_phi_copies(target)
+        label = bb_label(target)
+        emit PGoto.new(label, comment: "goto #{target}")
       elsif inst.operands.length == 3
         cond = resolve_operand(inst.operands[0])
-        true_label  = bb_label(inst.operands[1].value)
-        false_label = bb_label(inst.operands[2].value)
-        emit PNeg.new(cond, true_label, comment: "if #{op_str(inst.operands[0])} < 0 goto #{inst.operands[1].value}")
-        emit PGoto.new(false_label, comment: "goto #{inst.operands[2].value}")
+        true_target  = inst.operands[1].value
+        false_target = inst.operands[2].value
+
+        # Phi copies for conditional branches need special handling:
+        # We can't insert copies before the branch because we don't know which path
+        # will be taken. Instead, emit copies after the condition check.
+        # For true branch: if cond < 0, do phi copies for true_target, then jump
+        # For false branch: do phi copies for false_target, then jump
+        true_has_phis = has_phi_copies?(true_target)
+        false_has_phis = has_phi_copies?(false_target)
+
+        if !true_has_phis && !false_has_phis
+          # No phi nodes in either target
+          emit PNeg.new(cond, bb_label(true_target), comment: "if #{op_str(inst.operands[0])} < 0 goto #{true_target}")
+          emit PGoto.new(bb_label(false_target), comment: "goto #{false_target}")
+        else
+          # Need intermediate blocks for phi copies
+          @cmp_id += 1
+          true_phi_label = @mem.alloc_label("#{@current_func}_phi_t#{@cmp_id}")
+          false_phi_label = @mem.alloc_label("#{@current_func}_phi_f#{@cmp_id}")
+
+          emit PNeg.new(cond, true_phi_label, comment: "if #{op_str(inst.operands[0])} < 0")
+          # Fall through to false path
+          emit PLabel.new(false_phi_label)
+          emit_phi_copies(false_target)
+          emit PGoto.new(bb_label(false_target), comment: "goto #{false_target}")
+          # True path
+          emit PLabel.new(true_phi_label)
+          emit_phi_copies(true_target)
+          emit PGoto.new(bb_label(true_target), comment: "goto #{true_target}")
+        end
       end
     end
 
@@ -1015,9 +1064,9 @@ module S4C
       emit PLabel.new(done_label)
     end
 
-    def lower_phi(inst)
-      fvar(inst.result)
-      emit PLabel.new("", comment: "TODO: phi #{inst.raw}")
+    def lower_phi(_inst)
+      # Phi copies are handled at branch points (see emit_phi_copies)
+      # The phi result variable was pre-allocated in lower_function
     end
 
     def lower_cast(inst)
@@ -1050,6 +1099,22 @@ module S4C
       when :label then "%#{op.value}"
       else op.value.to_s
       end
+    end
+
+    def emit_phi_copies(target_block)
+      return unless @phi_copies[target_block]
+      copies = @phi_copies[target_block][@current_block]
+      return unless copies
+      copies.each do |phi_result, val_op|
+        r = fvar(phi_result)
+        val = resolve_operand(val_op)
+        emit PCp.new(r, val, comment: "phi #{phi_result} = #{op_str(val_op)}")
+      end
+    end
+
+    def has_phi_copies?(target_block)
+      return false unless @phi_copies[target_block]
+      @phi_copies[target_block][@current_block]&.any?
     end
 
     def resolve_global(name)
