@@ -13,6 +13,16 @@ module S4C
       while i < lines.length
         line = lines[i]
 
+        # Global variable declaration: @name = global i32 VALUE, align N
+        if line =~ /^@([\w.]+)\s*=\s*(?:dso_local\s+)?(?:global|constant)\s+(\w+)\s+(-?\d+)/
+          name = $1
+          type = $2
+          value = $3.to_i
+          mod.globals << { name: name, type: type, value: value }
+          i += 1
+          next
+        end
+
         # Function definition
         if line =~ /^define\s+(\w+)\s+@([\w.]+)\(([^)]*)\)/
           ret_type = $1
@@ -280,10 +290,12 @@ module S4C
       end
     end
 
-    # Parse a single value: "%name" → var, "42" → const
+    # Parse a single value: "%name" → var, "@name" → global, "42" → const
     def parse_value(str, type = nil)
       if str.start_with?('%')
         Operand.new(:var, str[1..], type: type)
+      elsif str.start_with?('@')
+        Operand.new(:global, str[1..], type: type)
       elsif str =~ /^-?\d+$/
         Operand.new(:const, str.to_i, type: type)
       else

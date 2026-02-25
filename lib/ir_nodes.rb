@@ -32,10 +32,11 @@ module S4C
       @type  = type    # e.g. "i32"
     end
 
-    def var?   = @kind == :var
-    def const? = @kind == :const
-    def label? = @kind == :label
-    def raw?   = @kind == :raw
+    def var?    = @kind == :var
+    def const?  = @kind == :const
+    def label?  = @kind == :label
+    def raw?    = @kind == :raw
+    def global? = @kind == :global
 
     def to_s
       case @kind
@@ -92,7 +93,7 @@ module S4C
 
     def initialize
       @functions = []
-      @globals   = {}
+      @globals   = []
     end
 
     def <<(func)

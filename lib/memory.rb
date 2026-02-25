@@ -47,6 +47,14 @@ module S4C
       label
     end
 
+    # Allocate a global variable with an initial value
+    def alloc_global(label, value)
+      label = unique_name(label) if @used_names[label]
+      @used_names[label] = true
+      @data_entries << [label, value]
+      label
+    end
+
     # Backward compat: unscoped var (for single-function programs)
     def var(ir_name)
       func_var("_", ir_name)

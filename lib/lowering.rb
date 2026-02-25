@@ -24,6 +24,14 @@ module S4C
 
     # Lower an entire IR module
     def lower(ir_module)
+      # Allocate global variables in the data section
+      ir_module.globals.each do |g|
+        label = "global_#{g[:name]}"
+        @mem.alloc_global(label, g[:value])
+        @globals_map ||= {}
+        @globals_map[g[:name]] = label
+      end
+
       # First pass: register all functions and their params
       ir_module.functions.each do |func|
         register_function(func)
@@ -995,9 +1003,10 @@ module S4C
     # Resolve an IR operand to a SUBNEG4 variable name (scoped to current function)
     def resolve_operand(op)
       case op.kind
-      when :var   then fvar(op.value)
-      when :const then @mem.const(op.value)
-      when :label then bb_label(op.value)
+      when :var    then fvar(op.value)
+      when :const  then @mem.const(op.value)
+      when :label  then bb_label(op.value)
+      when :global then resolve_global(op.value)
       else
         raise "Cannot resolve operand: #{op}"
       end
@@ -1015,6 +1024,11 @@ module S4C
       when :label then "%#{op.value}"
       else op.value.to_s
       end
+    end
+
+    def resolve_global(name)
+      @globals_map ||= {}
+      @globals_map[name] || raise("Unknown global: @#{name}")
     end
 
     def mark_pointer(ir_name)
