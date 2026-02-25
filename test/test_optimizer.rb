@@ -732,6 +732,252 @@ class TestOptimizer < Minitest::Test
     refute result.any? { |op| op.is_a?(S4C::PLabel) && op.name == "orphan_target" }
   end
 
+  # ── LocalValueNumbering ─────────────────────────────────────────
+
+  def test_lvn_redundant_add_eliminated
+    a = @mem.func_var("main", "a")
+    b = @mem.func_var("main", "b")
+    c1 = @mem.func_var("main", "c1")
+    c2 = @mem.func_var("main", "c2")
+    rv = @mem.func_var("main", "___retval")
+
+    ops = [
+      S4C::PAdd.new(a, b, c1),
+      S4C::PAdd.new(a, b, c2),  # redundant
+      S4C::PAdd.new(c1, c2, rv),  # use both so DSE keeps them
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    adds = result.select { |op| op.is_a?(S4C::PAdd) }
+    # LVN should eliminate the second PAdd, then copy prop may simplify further
+    # The key: there should be fewer than 3 PAdds (at least one was eliminated)
+    assert adds.length < 3, "LVN should eliminate redundant PAdd"
+  end
+
+  def test_lvn_add_commutativity
+    a = @mem.func_var("main", "a")
+    b = @mem.func_var("main", "b")
+    c1 = @mem.func_var("main", "c1")
+    c2 = @mem.func_var("main", "c2")
+    rv = @mem.func_var("main", "___retval")
+
+    ops = [
+      S4C::PAdd.new(a, b, c1),
+      S4C::PAdd.new(b, a, c2),  # same computation (commutative)
+      S4C::PAdd.new(c1, c2, rv),  # use both
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    adds = result.select { |op| op.is_a?(S4C::PAdd) }
+    assert adds.length < 3, "Commutative PAdd should be eliminated by LVN"
+  end
+
+  def test_lvn_sub_not_commutative
+    a = @mem.func_var("main", "a")
+    b = @mem.func_var("main", "b")
+    c1 = @mem.func_var("main", "c1")
+    c2 = @mem.func_var("main", "c2")
+    rv = @mem.func_var("main", "___retval")
+
+    ops = [
+      S4C::PSub.new(a, b, c1),  # c1 = b - a
+      S4C::PSub.new(b, a, c2),  # c2 = a - b (different!)
+      S4C::PAdd.new(c1, c2, rv),  # use both
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    subs = result.select { |op| op.is_a?(S4C::PSub) }
+    assert_equal 2, subs.length, "Non-commutative PSub should NOT be merged"
+  end
+
+  def test_lvn_resets_at_label
+    a = @mem.func_var("main", "a")
+    b = @mem.func_var("main", "b")
+    c1 = @mem.func_var("main", "c1")
+    c2 = @mem.func_var("main", "c2")
+    rv = @mem.func_var("main", "___retval")
+
+    ops = [
+      S4C::PAdd.new(a, b, c1),
+      S4C::PNeg.new(a, "lbl"),  # branch to lbl (makes it a jump target)
+      S4C::PLabel.new("lbl"),
+      S4C::PAdd.new(a, b, c2),  # same computation but after label
+      S4C::PAdd.new(c1, c2, rv),  # use both
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # Both PAdds must survive (LVN resets at label boundary)
+    adds = result.select { |op| op.is_a?(S4C::PAdd) }
+    assert adds.length >= 2, "PAdd after label should not be eliminated by LVN"
+  end
+
+  def test_lvn_invalidation_on_operand_redefine
+    a = @mem.func_var("main", "a")
+    b = @mem.func_var("main", "b")
+    c1 = @mem.func_var("main", "c1")
+    c2 = @mem.func_var("main", "c2")
+    rv = @mem.func_var("main", "___retval")
+
+    ops = [
+      S4C::PAdd.new(a, b, c1),
+      S4C::PCp.new(a, @mem.const(99)),  # redefine a
+      S4C::PAdd.new(a, b, c2),          # same signature but a changed!
+      S4C::PAdd.new(c1, c2, rv),        # use both
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # Both PAdds reading a and b should survive
+    # (constant folding may convert the second to PCp since a=99 is constant)
+    arith = result.select { |op| op.is_a?(S4C::PAdd) || op.is_a?(S4C::PSub) }
+    assert arith.length >= 2, "PAdd after operand redefine should not be merged by LVN"
+  end
+
+  def test_lvn_different_ops_not_merged
+    a = @mem.func_var("main", "a")
+    b = @mem.func_var("main", "b")
+    c1 = @mem.func_var("main", "c1")
+    c2 = @mem.func_var("main", "c2")
+    rv = @mem.func_var("main", "___retval")
+
+    ops = [
+      S4C::PAdd.new(a, b, c1),
+      S4C::PSub.new(a, b, c2),  # different op
+      S4C::PAdd.new(c1, c2, rv),  # use both
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    adds = result.select { |op| op.is_a?(S4C::PAdd) }
+    subs = result.select { |op| op.is_a?(S4C::PSub) }
+    assert subs.length >= 1, "PSub should survive"
+    assert adds.length >= 1, "PAdd should survive"
+  end
+
+  # ── LoopInvariantCodeMotion ────────────────────────────────────
+
+  def test_licm_invariant_hoisted
+    # Use actual lowered loop pattern: PLabel→body→PNeg(exit)→PGoto(header)
+    x = @mem.func_var("main", "x")
+    y = @mem.func_var("main", "y")
+    cnt = @mem.func_var("main", "cnt")
+    tmp = @mem.func_var("main", "tmp")
+    rv = @mem.func_var("main", "___retval")
+    c1 = @mem.const(1)
+    c10 = @mem.const(10)
+
+    ops = [
+      S4C::PCp.new(cnt, @mem.zero),
+      S4C::PLabel.new("loop"),
+      S4C::PAdd.new(x, c1, y),       # invariant: x and C_1 not modified in loop
+      S4C::PAdd.new(cnt, c1, cnt),    # variant: cnt is loop-defined
+      S4C::PAdd.new(cnt, y, rv),      # use y inside loop
+      S4C::PSub.new(cnt, c10, tmp),
+      S4C::PNeg.new(tmp, "done"),     # if tmp < 0, exit loop
+      S4C::PGoto.new("loop"),         # back-edge (PGoto to earlier label)
+      S4C::PLabel.new("done"),
+      S4C::PCp.new(rv, y),
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # y should be computed before the loop (hoisted)
+    loop_idx = result.index { |op| op.is_a?(S4C::PLabel) && op.name == "loop" }
+    pre_loop = result[0...loop_idx]
+    pre_writes = pre_loop.flat_map { |op|
+      case op
+      when S4C::PAdd then [op.c]
+      when S4C::PSub then [op.c]
+      when S4C::PCp then [op.dst]
+      else []
+      end
+    }
+    assert pre_writes.include?(y), "Invariant computation of y should be hoisted before loop"
+  end
+
+  def test_licm_variant_not_hoisted
+    cnt = @mem.func_var("main", "cnt")
+    tmp = @mem.func_var("main", "tmp")
+    rv = @mem.func_var("main", "___retval")
+    c1 = @mem.const(1)
+    c10 = @mem.const(10)
+
+    ops = [
+      S4C::PCp.new(cnt, @mem.zero),
+      S4C::PLabel.new("loop"),
+      S4C::PAdd.new(cnt, c1, cnt),    # variant: reads and writes cnt
+      S4C::PSub.new(cnt, c10, tmp),
+      S4C::PNeg.new(tmp, "done"),
+      S4C::PGoto.new("loop"),         # back-edge
+      S4C::PLabel.new("done"),
+      S4C::PCp.new(rv, cnt),
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # PAdd(cnt, c1, cnt) should be inside the loop
+    loop_idx = result.index { |op| op.is_a?(S4C::PLabel) && op.name == "loop" }
+    add_idx = result.index { |op| op.is_a?(S4C::PAdd) && op.c == cnt }
+    assert add_idx && add_idx > loop_idx, "Variant op should NOT be hoisted"
+  end
+
+  def test_licm_call_blocks_shared_var_hoist
+    # Subroutine shared variables (__*) should not be hoisted when loop has calls
+    shared = @mem.func_var("main", "__mul_arg2")
+    cnt = @mem.func_var("main", "cnt")
+    tmp = @mem.func_var("main", "tmp")
+    rv = @mem.func_var("main", "___retval")
+    c1 = @mem.const(1)
+    c2 = @mem.const(2)
+    c10 = @mem.const(10)
+
+    ops = [
+      S4C::PCp.new(cnt, @mem.zero),
+      S4C::PLabel.new("loop"),
+      S4C::PCp.new(shared, c2),                              # writes to __mul_arg2
+      S4C::PCallSetReturn.new("ret_lbl", "ret_d"),
+      S4C::PGoto.new("func___mul"),                           # subroutine call (not a back-edge)
+      S4C::PLabel.new("ret_lbl"),
+      S4C::PAdd.new(cnt, c1, cnt),
+      S4C::PSub.new(cnt, c10, tmp),
+      S4C::PNeg.new(tmp, "done"),
+      S4C::PGoto.new("loop"),                                 # back-edge
+      S4C::PLabel.new("done"),
+      S4C::PCp.new(rv, cnt),
+      S4C::PHalt.new,
+    ]
+
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # PCp(__mul_arg2, c2) should remain inside the loop
+    loop_idx = result.index { |op| op.is_a?(S4C::PLabel) && op.name == "loop" }
+    cp_idx = result.index { |op| op.is_a?(S4C::PCp) && op.dst == shared }
+    if cp_idx
+      assert cp_idx > loop_idx, "Shared var write should NOT be hoisted when loop has calls"
+    end
+  end
+
   # ── Combined optimization ───────────────────────────────────────
 
   def test_alloca_load_store_chain

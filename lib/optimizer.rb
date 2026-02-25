@@ -6,7 +6,7 @@ require 'set'
 module S4C
   # Optimizes pseudo-op sequences between Lowering and Expander.
   # Runs iterative passes: GotoNext, GotoChain, RedundantBranch, Unreachable,
-  # DeadLabel, ConstFold, StrengthRed, Peephole, CopyProp, DeadStore, PushPop.
+  # DeadLabel, ConstFold, StrengthRed, Peephole, LVN, LICM, CopyProp, DeadStore, PushPop.
   class Optimizer
     attr_reader :stats
 
@@ -37,6 +37,8 @@ module S4C
         changed |= constant_folding
         changed |= strength_reduction
         changed |= peephole_double_negation
+        changed |= local_value_numbering
+        changed |= loop_invariant_code_motion
         changed |= copy_propagation
         changed |= dead_store_elimination
         changed |= push_pop_elimination
@@ -422,7 +424,164 @@ module S4C
       changed
     end
 
-    # ── Pass 9: CopyPropagation ───────────────────────────────────────
+    # ── Pass 9: LocalValueNumbering ──────────────────────────────────
+    # Within-block CSE: detect identical computations and replace with PCp.
+
+    def local_value_numbering
+      changed = false
+      value_map = {}   # signature → result variable
+      result = []
+
+      @ops.each do |op|
+        # Reset at block boundaries
+        if op.is_a?(PLabel) || barrier?(op) || unconditional_transfer?(op) || op.is_a?(PNeg)
+          result << op
+          value_map = {} if op.is_a?(PLabel) || barrier?(op) || unconditional_transfer?(op)
+          next
+        end
+
+        # Invalidate entries whose result or operands reference a variable
+        # being written by this op (must happen BEFORE signature check so
+        # stale entries are cleared, but AFTER which new entries can be added)
+        writes(op).each do |w|
+          value_map.delete_if { |sig, res| res == w || sig.split(':').include?(w) }
+        end
+
+        sig = value_signature(op)
+        if sig && value_map[sig]
+          # Redundant computation → replace with copy
+          dst = writes(op).first
+          if dst
+            changed = true
+            result << PCp.new(dst, value_map[sig], comment: "#{op.comment} [LVN]")
+          else
+            result << op
+          end
+        else
+          result << op
+          # Register this computation
+          if sig
+            dst = writes(op).first
+            value_map[sig] = dst if dst
+          end
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
+    # Compute a canonical value signature for CSE
+    def value_signature(op)
+      case op
+      when PAdd
+        # Commutative: sort operands
+        "ADD:#{[op.a, op.b].sort.join(':')}"
+      when PSub
+        # Non-commutative: preserve order (c = b - a)
+        "SUB:#{op.a}:#{op.b}"
+      else
+        nil
+      end
+    end
+
+    # ── Pass 10: LoopInvariantCodeMotion ─────────────────────────────
+    # Hoist loop-invariant operations to just before the loop header.
+
+    def loop_invariant_code_motion
+      # Find back-edges: PGoto(L) where PLabel(L) appears earlier
+      label_positions = {}
+      @ops.each_with_index do |op, i|
+        label_positions[op.name] = i if op.is_a?(PLabel)
+      end
+
+      back_edges = []
+      @ops.each_with_index do |op, i|
+        if op.is_a?(PGoto) && label_positions[op.label] && label_positions[op.label] < i
+          # Skip function calls: PGoto preceded by PCallSetReturn is a call, not a loop
+          prev = i > 0 ? @ops[i - 1] : nil
+          next if prev.is_a?(PCallSetReturn)
+          back_edges << { header: label_positions[op.label], tail: i, label: op.label }
+        end
+      end
+
+      return false if back_edges.empty?
+
+      # Sort by header position descending (process inner loops first)
+      back_edges.sort_by! { |e| -e[:header] }
+
+      changed = false
+      back_edges.each do |edge|
+        header_idx = edge[:header]
+        tail_idx = edge[:tail]
+
+        # Collect variables defined inside the loop
+        loop_defs = Set.new
+        has_call = false
+        (header_idx..tail_idx).each do |i|
+          writes(@ops[i]).each { |v| loop_defs << v }
+          has_call = true if @ops[i].is_a?(PCallSetReturn)
+        end
+
+        # If loop contains subroutine calls, their shared result variables
+        # (e.g. __mul_result, __srem_remainder) are modified outside the loop
+        # body's index range. Treat all __-prefixed vars as loop-variant.
+        if has_call
+          @ops.each do |op|
+            (reads(op) + writes(op)).each do |v|
+              loop_defs << v if v.start_with?('__')
+            end
+          end
+        end
+
+        # Count how many times each variable is written in the loop
+        write_counts = Hash.new(0)
+        (header_idx..tail_idx).each do |i|
+          writes(@ops[i]).each { |v| write_counts[v] += 1 }
+        end
+
+        # Find loop-invariant ops
+        const_map = build_constant_map
+        hoistable = []
+
+        ((header_idx + 1)..tail_idx).each do |i|
+          op = @ops[i]
+          next unless op.is_a?(PAdd) || op.is_a?(PSub) || op.is_a?(PCp)
+
+          # Check: all reads are loop-invariant (not defined in loop OR constant)
+          all_reads_invariant = reads(op).all? { |v| !loop_defs.include?(v) || const_map[v] }
+
+          # Check: destination written only once in the loop
+          # Also: subroutine-shared vars (__*) can be modified by calls
+          dst = writes(op).first
+          next unless dst
+          single_write = write_counts[dst] == 1
+          next if has_call && dst.start_with?('__')
+
+          if all_reads_invariant && single_write
+            hoistable << i
+          end
+        end
+
+        next if hoistable.empty?
+
+        # Hoist: move ops to just before the header
+        hoisted_ops = hoistable.map { |i| @ops[i] }
+        hoistable.sort.reverse.each { |i| @ops.delete_at(i) }
+
+        # Recalculate header position (indices shifted by deletions before header)
+        deletions_before_header = hoistable.count { |i| i < header_idx }
+        insert_pos = header_idx - deletions_before_header
+
+        hoisted_ops.reverse.each { |op| @ops.insert(insert_pos, op) }
+        changed = true
+        break # Indices are stale after modification; re-detect loops on next iteration
+      end
+
+      changed
+    end
+
+    # ── Pass 11: CopyPropagation ───────────────────────────────────────
     # Single-pass forward substitution within straight-line blocks.
     # Resets substitution map at PLabel and barrier boundaries.
     # Extension: keeps subst alive across PLabel with single fallthrough predecessor.
