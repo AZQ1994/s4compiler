@@ -127,6 +127,8 @@ module S4C
         parse_call_operands(rest)
       when 'phi'
         parse_phi_operands(rest)
+      when 'select'
+        parse_select_operands(rest)
       when 'sext', 'zext', 'trunc', 'bitcast', 'ptrtoint', 'inttoptr'
         parse_cast_operands(rest)
       else
@@ -252,6 +254,18 @@ module S4C
         pairs.flat_map do |val, bb|
           [parse_value(val.strip, type), Operand.new(:label, bb)]
         end
+      else
+        [Operand.new(:raw, rest)]
+      end
+    end
+
+    # Select: "i1 %cond, i32 %a, i32 %b"
+    def parse_select_operands(rest)
+      if rest =~ /^i1\s+(.+?),\s*(\w+)\s+(.+?),\s*(\w+)\s+(.+)/
+        cond = parse_value($1.strip, 'i1')
+        true_val = parse_value($3.strip, $2)
+        false_val = parse_value($5.strip, $4)
+        [cond, true_val, false_val]
       else
         [Operand.new(:raw, rest)]
       end

@@ -98,6 +98,7 @@ module S4C
       when 'store'         then lower_store(inst)
       when 'getelementptr' then lower_gep(inst)
       when 'call'          then lower_call(inst)
+      when 'select' then lower_select(inst)
       when 'phi'    then lower_phi(inst)
       when 'sext', 'zext', 'trunc', 'bitcast'
         lower_cast(inst)
@@ -572,6 +573,28 @@ module S4C
         r = fvar(inst.result)
         emit PCp.new(r, result_temp, comment: "#{inst.result} = #{func_name}() result")
       end
+    end
+
+    # %r = select i1 %cond, i32 %a, i32 %b
+    # if cond < 0, r = a; else r = b
+    def lower_select(inst)
+      cond = resolve_operand(inst.operands[0])
+      true_val = resolve_operand(inst.operands[1])
+      false_val = resolve_operand(inst.operands[2])
+      r = fvar(inst.result)
+
+      @cmp_id += 1
+      true_label = "#{@current_func}_sel_t_#{@cmp_id}"
+      done_label = "#{@current_func}_sel_done_#{@cmp_id}"
+      @mem.alloc_label(true_label)
+      @mem.alloc_label(done_label)
+
+      emit PNeg.new(cond, true_label, comment: "select: if cond < 0")
+      emit PCp.new(r, false_val, comment: "select false value")
+      emit PGoto.new(done_label, comment: "select done")
+      emit PLabel.new(true_label)
+      emit PCp.new(r, true_val, comment: "select true value")
+      emit PLabel.new(done_label)
     end
 
     def lower_phi(inst)

@@ -250,6 +250,14 @@ class TestE2E < Minitest::Test
     assert_equal 42, sim.read_label('main___retval')
   end
 
+  def test_factorial
+    # factorial(6) = 720
+    sim, result, _ = compile_and_run(fixture('factorial.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 720, sim.read_label('main___retval')
+  end
+
   def test_gcd
     # gcd(48, 18) = 6
     sim, result, _ = compile_and_run(fixture('gcd.ll'), max_cycles: 10_000_000)
