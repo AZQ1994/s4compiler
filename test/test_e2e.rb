@@ -380,4 +380,20 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 55, sim.read_label('main___retval')
   end
+
+  def test_mul_const
+    # Test constant specialization: x*0, x*1, x*2, x*3, x*8, 0*x, 1*x, x*-1, x*-3
+    sim, result, _ = compile_and_run(fixture('mul_const.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 77, sim.read_label('main___retval')
+  end
+
+  def test_div_const
+    # Test trivial div/rem cases: x/1, x/-1, x%1, x%-1, 0/x, 0%x
+    sim, result, _ = compile_and_run(fixture('div_const.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 100, sim.read_label('main___retval')
+  end
 end

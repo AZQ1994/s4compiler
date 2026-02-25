@@ -175,11 +175,46 @@ module S4C
       emit PSub.new(b, a, r, comment: "#{inst.result} = #{op_str(inst.operands[0])} - #{op_str(inst.operands[1])}")
     end
 
-    # %r = mul i32 %a, %b → call built-in __mul subroutine
+    # %r = mul i32 %a, %b → inline for small constants, else call __mul subroutine
     def lower_mul(inst)
+      r = fvar(inst.result)
+
+      # Detect constant operand (mul is commutative)
+      const_op, var_op = nil, nil
+      if inst.operands[0].const?
+        const_op, var_op = inst.operands[0], inst.operands[1]
+      elsif inst.operands[1].const?
+        const_op, var_op = inst.operands[1], inst.operands[0]
+      end
+
+      if const_op
+        n = const_op.value
+        var_label = resolve_operand(var_op)
+
+        case n
+        when 0
+          emit PCp.new(r, @mem.zero, comment: "#{inst.result} = 0 (mul by 0)")
+          return
+        when 1
+          emit PCp.new(r, var_label, comment: "#{inst.result} = #{op_str(var_op)} (mul by 1)")
+          return
+        when -1
+          emit PSub.new(var_label, @mem.zero, r, comment: "#{inst.result} = -#{op_str(var_op)} (mul by -1)")
+          return
+        when 2..8
+          emit_mul_addition_chain(var_label, n, r)
+          return
+        when -8..-2
+          t = @mem.temp
+          emit_mul_addition_chain(var_label, n.abs, t)
+          emit PSub.new(t, @mem.zero, r, comment: "#{inst.result} = negate (mul by #{n})")
+          return
+        end
+      end
+
+      # Fallback: subroutine call
       a = resolve_operand(inst.operands[0])
       b = resolve_operand(inst.operands[1])
-      r = fvar(inst.result)
       ensure_mul_subroutine
       mul = @builtins[:mul]
 
@@ -193,6 +228,28 @@ module S4C
       emit PGoto.new("__mul", comment: "call __mul")
       emit PLabel.new(ret_label, comment: "return from __mul")
       emit PCp.new(r, mul[:result], comment: "#{inst.result} = mul result")
+    end
+
+    # Emit inline addition chain for multiplication by small constant N (2..8)
+    def emit_mul_addition_chain(var_label, n, dest)
+      if n & (n - 1) == 0
+        # Power of 2: doubling chain (log2(N) PAdd ops)
+        shifts = Math.log2(n).to_i
+        current = var_label
+        shifts.times do |i|
+          dst = (i == shifts - 1) ? dest : @mem.temp
+          emit PAdd.new(current, current, dst, comment: "mul by #{n} (double #{i + 1}/#{shifts})")
+          current = dst
+        end
+      else
+        # General: repeated addition (N-1 PAdd ops)
+        current = var_label
+        (n - 1).times do |i|
+          dst = (i == n - 2) ? dest : @mem.temp
+          emit PAdd.new(var_label, current, dst, comment: "mul by #{n} (accum #{i + 2}x)")
+          current = dst
+        end
+      end
     end
 
     # Emit the __mul subroutine once (repeated addition: result = arg1 * arg2)
@@ -833,11 +890,31 @@ module S4C
       emit PLabel.new(done_label)
     end
 
-    # %r = sdiv i32 %a, %b → call built-in __sdiv subroutine
+    # %r = sdiv i32 %a, %b → inline trivial cases, else call __sdiv subroutine
     def lower_sdiv(inst)
+      r = fvar(inst.result)
+
+      # Trivial constant divisors
+      if inst.operands[1].const?
+        d = inst.operands[1].value
+        if d == 1
+          emit PCp.new(r, resolve_operand(inst.operands[0]), comment: "#{inst.result} = #{op_str(inst.operands[0])} (sdiv by 1)")
+          return
+        elsif d == -1
+          emit PSub.new(resolve_operand(inst.operands[0]), @mem.zero, r, comment: "#{inst.result} = -#{op_str(inst.operands[0])} (sdiv by -1)")
+          return
+        end
+      end
+
+      # 0 / x = 0
+      if inst.operands[0].const? && inst.operands[0].value == 0
+        emit PCp.new(r, @mem.zero, comment: "#{inst.result} = 0 (0 / x)")
+        return
+      end
+
+      # Fallback: subroutine call
       a = resolve_operand(inst.operands[0])
       b = resolve_operand(inst.operands[1])
-      r = fvar(inst.result)
       ensure_sdiv_subroutine
 
       sdiv = @builtins[:sdiv]
@@ -853,11 +930,28 @@ module S4C
       emit PCp.new(r, sdiv[:quotient], comment: "#{inst.result} = sdiv result")
     end
 
-    # %r = srem i32 %a, %b → call built-in __srem subroutine
+    # %r = srem i32 %a, %b → inline trivial cases, else call __srem subroutine
     def lower_srem(inst)
+      r = fvar(inst.result)
+
+      # Trivial constant divisors
+      if inst.operands[1].const?
+        d = inst.operands[1].value
+        if d == 1 || d == -1
+          emit PCp.new(r, @mem.zero, comment: "#{inst.result} = 0 (srem by #{d})")
+          return
+        end
+      end
+
+      # 0 % x = 0
+      if inst.operands[0].const? && inst.operands[0].value == 0
+        emit PCp.new(r, @mem.zero, comment: "#{inst.result} = 0 (0 % x)")
+        return
+      end
+
+      # Fallback: subroutine call
       a = resolve_operand(inst.operands[0])
       b = resolve_operand(inst.operands[1])
-      r = fvar(inst.result)
       ensure_srem_subroutine
 
       srem = @builtins[:srem]
