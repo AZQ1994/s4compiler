@@ -37,6 +37,8 @@ module S4C
       when PHalt then expand_halt(op)
       when PCallSetReturn then expand_call_set_return(op)
       when PReturnJump    then expand_return_jump(op)
+      when PPush          then expand_push(op)
+      when PPop           then expand_pop(op)
       when PLabel
         @instructions << [:label, op.name, op.comment]
       when PData
@@ -76,7 +78,10 @@ module S4C
     end
 
     def expand_halt(_op)
-      @instructions << Subneg4.new(@mem.zero, @mem.zero, @mem.zero, 'HALT', "halt")
+      z = @mem.zero
+      c_n1 = @mem.const(-1)
+      t = @mem.temp
+      @instructions << Subneg4.new(z, c_n1, t, 'HALT', "halt")
     end
 
     # PReturnJump(d_label):
@@ -89,6 +94,42 @@ module S4C
       t = @mem.temp
       # Special instruction with per-operand label on D
       @instructions << [:return_jump, z, c_n1, t, op.d_label, op.comment]
+    end
+
+    # PPush(val, push_id):
+    # Self-modifying push: write val to mem[SP], then SP -= 1
+    # 1. Copy SP into C operand of write instruction
+    # 2. Write val to mem[SP]  (C operand was patched)
+    # 3. Decrement SP
+    def expand_push(op)
+      z = @mem.zero
+      sp = @mem.func_var("__stack", "SP")
+      one = @mem.const(1)
+      c_label = "push_c_#{op.push_id}"
+      # Step 1: Copy SP to the C operand of the write instruction
+      @instructions << Subneg4.new(z, sp, c_label, 'NEXT', "#{op.comment} (set write addr)")
+      # Step 2: Write val to mem[SP]. C operand has per-operand label, patched by step 1
+      @instructions << [:push_write, z, op.val, c_label, op.comment]
+      # Step 3: SP -= 1
+      @instructions << Subneg4.new(one, sp, sp, 'NEXT', "#{op.comment} (SP--)")
+    end
+
+    # PPop(dst, pop_id):
+    # Self-modifying pop: SP += 1, then read mem[SP] into dst
+    # 1. Increment SP
+    # 2. Copy SP into B operand of read instruction
+    # 3. Read mem[SP] into dst (B operand was patched)
+    def expand_pop(op)
+      z = @mem.zero
+      sp = @mem.func_var("__stack", "SP")
+      c_n1 = @mem.const(-1)
+      b_label = "pop_b_#{op.pop_id}"
+      # Step 1: SP += 1 (SP = SP - (-1))
+      @instructions << Subneg4.new(c_n1, sp, sp, 'NEXT', "#{op.comment} (SP++)")
+      # Step 2: Copy SP to B operand of read instruction
+      @instructions << Subneg4.new(z, sp, b_label, 'NEXT', "#{op.comment} (set read addr)")
+      # Step 3: Read mem[SP] to dst
+      @instructions << [:pop_read, z, b_label, op.dst, op.comment]
     end
 
     # PCallSetReturn(ret_d_label, return_label):

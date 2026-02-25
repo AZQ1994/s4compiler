@@ -116,6 +116,12 @@ module S4C
       name
     end
 
+    # Get all variable labels for a given function (in allocation order)
+    def func_all_labels(func_name)
+      prefix = "#{func_name}::"
+      @variables.select { |k, _| k.start_with?(prefix) }.values
+    end
+
     private
 
     def sanitize(name)

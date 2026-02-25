@@ -18,7 +18,11 @@ module S4C
       # Data section
       lines << "// === Data Section ==="
       @mem.data_entries.each do |label, value|
-        lines << "#{label}:#{value}"
+        if label == "__stack_SP"
+          lines << "#{label}:&stack_top"
+        else
+          lines << "#{label}:#{value}"
+        end
       end
       lines << ""
 
@@ -51,20 +55,24 @@ module S4C
           when :return_jump
             # Self-modifying goto: cd:D_LABEL: A, B, C, 0
             _, a, b, c, d_label, comment = inst
-            prefix = ""
-            unless pending_labels.empty?
-              prefix = pending_labels.map { |l| "#{l}:" }.join
-              pending_labels.clear
-            end
+            prefix = flush_labels(pending_labels)
             cmt = comment && !comment.empty? ? " // #{comment}" : ""
             lines << "#{prefix}#{a}, #{b}, #{c}, cd:#{d_label}:0#{cmt}"
+          when :push_write
+            # Self-modifying write: A, B, cc:C_LABEL:0, NEXT
+            _, a, b, c_label, comment = inst
+            prefix = flush_labels(pending_labels)
+            cmt = comment && !comment.empty? ? " // #{comment}" : ""
+            lines << "#{prefix}#{a}, #{b}, cc:#{c_label}:0, NEXT#{cmt}"
+          when :pop_read
+            # Self-modifying read: A, cb:B_LABEL:0, C, NEXT
+            _, a, b_label, c, comment = inst
+            prefix = flush_labels(pending_labels)
+            cmt = comment && !comment.empty? ? " // #{comment}" : ""
+            lines << "#{prefix}#{a}, cb:#{b_label}:0, #{c}, NEXT#{cmt}"
           end
         when Subneg4
-          prefix = ""
-          unless pending_labels.empty?
-            prefix = pending_labels.map { |l| "#{l}:" }.join
-            pending_labels.clear
-          end
+          prefix = flush_labels(pending_labels)
           cmt = inst.comment && !inst.comment.empty? ? " // #{inst.comment}" : ""
           lines << "#{prefix}#{inst.a}, #{inst.b}, #{inst.c}, #{inst.d}#{cmt}"
         end
@@ -83,7 +91,26 @@ module S4C
         lines << ">>> Result: ${#{retval_label}()}"
       end
 
+      # Stack allocation (if stack is used)
+      sp_label = @mem.data_entries.map(&:first).find { |l| l == "__stack_SP" }
+      if sp_label
+        lines << ""
+        lines << "// === Stack ==="
+        lines << "\#{#{STACK_SIZE}, stack_bottom, stack_top}#"
+      end
+
       lines.join("\n") + "\n"
+    end
+
+    STACK_SIZE = 256
+
+    private
+
+    def flush_labels(pending_labels)
+      return "" if pending_labels.empty?
+      prefix = pending_labels.map { |l| "#{l}:" }.join
+      pending_labels.clear
+      prefix
     end
   end
 end

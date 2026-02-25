@@ -15,6 +15,8 @@ module S4C
       @current_func = nil
       @functions = {}       # func_name → { params: [...], retval: label }
       @call_id = 0          # unique ID for each call site
+      @builtins = {}        # :mul → { arg1:, arg2:, result:, ret_d: }
+      @deferred_subroutines = []
     end
 
     # Lower an entire IR module
@@ -35,6 +37,13 @@ module S4C
       # Lower each function
       ir_module.functions.each do |func|
         lower_function(func)
+      end
+
+      # Emit deferred built-in subroutines
+      @deferred_subroutines.each do |name|
+        case name
+        when :mul then emit_mul_subroutine
+        end
       end
 
       self
@@ -108,9 +117,75 @@ module S4C
       emit PSub.new(b, a, r, comment: "#{inst.result} = #{op_str(inst.operands[0])} - #{op_str(inst.operands[1])}")
     end
 
+    # %r = mul i32 %a, %b → call built-in __mul subroutine
     def lower_mul(inst)
-      emit PLabel.new("", comment: "TODO: mul #{inst.raw}")
-      fvar(inst.result)
+      a = resolve_operand(inst.operands[0])
+      b = resolve_operand(inst.operands[1])
+      r = fvar(inst.result)
+      ensure_mul_subroutine
+      mul = @builtins[:mul]
+
+      @call_id += 1
+      ret_label = "#{@current_func}_mulret#{@call_id}"
+      @mem.alloc_label(ret_label)
+
+      emit PCp.new(mul[:arg1], a, comment: "mul arg1 = #{op_str(inst.operands[0])}")
+      emit PCp.new(mul[:arg2], b, comment: "mul arg2 = #{op_str(inst.operands[1])}")
+      emit PCallSetReturn.new(mul[:ret_d], ret_label, comment: "mul return addr")
+      emit PGoto.new("__mul", comment: "call __mul")
+      emit PLabel.new(ret_label, comment: "return from __mul")
+      emit PCp.new(r, mul[:result], comment: "#{inst.result} = mul result")
+    end
+
+    # Emit the __mul subroutine once (repeated addition: result = arg1 * arg2)
+    # Algorithm: result=0; if arg2<0 then negate both; while arg2>0: result+=arg1, arg2-=1
+    def ensure_mul_subroutine
+      return if @builtins[:mul]
+
+      arg1   = @mem.func_var("__mul", "arg1")
+      arg2   = @mem.func_var("__mul", "arg2")
+      result = @mem.func_var("__mul", "result")
+      ret_d  = "__mul_ret_d"
+
+      @builtins[:mul] = { arg1: arg1, arg2: arg2, result: result, ret_d: ret_d }
+
+      # The actual subroutine code will be emitted at the end
+      @deferred_subroutines << :mul
+    end
+
+    def emit_mul_subroutine
+      mul = @builtins[:mul]
+      a1  = mul[:arg1]
+      a2  = mul[:arg2]
+      res = mul[:result]
+
+      emit PLabel.new("__mul", comment: "built-in: multiply")
+      # result = 0
+      emit PCp.new(res, @mem.zero, comment: "result = 0")
+      # if arg2 == 0, return immediately
+      # Check sign of arg2: if negative, negate both
+      t = @mem.temp
+      emit PLabel.new("__mul_signchk")
+      emit PNeg.new(a2, "__mul_neg", comment: "if arg2 < 0 → negate both")
+      emit PGoto.new("__mul_loop", comment: "arg2 >= 0, start loop")
+      # Negate both
+      emit PLabel.new("__mul_neg")
+      emit PSub.new(a1, @mem.zero, a1, comment: "arg1 = -arg1")
+      emit PSub.new(a2, @mem.zero, a2, comment: "arg2 = -arg2")
+      # Loop: while arg2 > 0, result += arg1, arg2 -= 1
+      emit PLabel.new("__mul_loop")
+      one = @mem.const(1)
+      # Check arg2 > 0: arg2 - 1 >= 0 means arg2 > 0
+      # Use: 0 - arg2 → if negative (arg2 > 0), continue
+      emit PSub.new(a2, @mem.zero, t, comment: "t = -arg2")
+      emit PNeg.new(t, "__mul_body", comment: "if -arg2 < 0 (arg2 > 0) → loop body")
+      emit PGoto.new("__mul_done", comment: "arg2 <= 0 → done")
+      emit PLabel.new("__mul_body")
+      emit PAdd.new(a1, res, res, comment: "result += arg1")
+      emit PSub.new(one, a2, a2, comment: "arg2 -= 1")
+      emit PGoto.new("__mul_loop", comment: "repeat")
+      emit PLabel.new("__mul_done")
+      emit PReturnJump.new(mul[:ret_d], comment: "return from __mul")
     end
 
     # ret i32 %val
@@ -245,10 +320,21 @@ module S4C
         return
       end
 
-      # Generate unique return label for this call site
+      # Generate unique return label and IDs for this call site
       @call_id += 1
-      ret_label = "#{@current_func}_ret#{@call_id}"
+      call_id = @call_id
+      ret_label = "#{@current_func}_ret#{call_id}"
       @mem.alloc_label(ret_label)
+
+      # Save current function's state onto the stack (for recursion safety)
+      caller_info = @functions[@current_func]
+      save_labels = @mem.func_all_labels(@current_func)
+      # Also save the return address cell (lives in code section, but addressable)
+      save_labels = save_labels + [caller_info[:ret_d_label]] if caller_info && @current_func != 'main'
+
+      save_labels.each_with_index do |label, i|
+        emit PPush.new(label, "#{call_id}_s#{i}", comment: "save #{label}")
+      end
 
       # Copy arguments to callee's parameter slots
       args.each_with_index do |arg, i|
@@ -266,10 +352,22 @@ module S4C
       # Return label — execution continues here after callee returns
       emit PLabel.new(ret_label, comment: "return from #{func_name}")
 
-      # Copy callee's return value to our result variable
+      # Copy result BEFORE restoring state (callee's retval will be overwritten by pop)
+      result_temp = nil
+      if inst.result
+        result_temp = @mem.temp
+        emit PCp.new(result_temp, callee[:retval], comment: "save #{func_name}() result")
+      end
+
+      # Restore current function's state from the stack (reverse order)
+      save_labels.reverse.each_with_index do |label, i|
+        emit PPop.new(label, "#{call_id}_r#{i}", comment: "restore #{label}")
+      end
+
+      # Copy saved result to final destination variable
       if inst.result
         r = fvar(inst.result)
-        emit PCp.new(r, callee[:retval], comment: "#{inst.result} = #{func_name}() result")
+        emit PCp.new(r, result_temp, comment: "#{inst.result} = #{func_name}() result")
       end
     end
 

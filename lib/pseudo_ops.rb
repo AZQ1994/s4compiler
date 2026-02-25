@@ -125,7 +125,6 @@ module S4C
 
   # P_RETURN_JUMP(d_label):
   # A goto instruction whose D operand is writable (per-operand label d_label).
-  # The caller overwrites d_label with the correct return address before calling.
   class PReturnJump < PseudoOp
     attr_reader :d_label
 
@@ -135,5 +134,31 @@ module S4C
     end
 
     def to_s = "P_RETURN_JUMP #{@d_label}"
+  end
+
+  # P_PUSH(val, push_id): push val onto the software stack
+  class PPush < PseudoOp
+    attr_reader :val, :push_id
+
+    def initialize(val, push_id, comment: "")
+      super(comment: comment)
+      @val = val
+      @push_id = push_id
+    end
+
+    def to_s = "P_PUSH #{@val}"
+  end
+
+  # P_POP(dst, pop_id): pop from software stack into dst
+  class PPop < PseudoOp
+    attr_reader :dst, :pop_id
+
+    def initialize(dst, pop_id, comment: "")
+      super(comment: comment)
+      @dst = dst
+      @pop_id = pop_id
+    end
+
+    def to_s = "P_POP #{@dst}"
   end
 end
