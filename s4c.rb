@@ -12,6 +12,7 @@
 
 $LOAD_PATH.unshift(File.join(__dir__, 'lib'))
 
+require 'open3'
 require 'parser'
 require 'ir_nodes'
 require 'lowering'
@@ -50,9 +51,17 @@ def main
     exit 1
   end
 
-  # Read input
+  # Read input (compile .c → .ll via clang if needed)
   source = if input_file == :stdin
              $stdin.read
+           elsif input_file.end_with?('.c')
+             ll_source, err, status = Open3.capture3("clang", "-S", "-emit-llvm", "-O0", "-o", "-", input_file)
+             unless status.success?
+               $stderr.puts "s4c: clang failed:\n#{err}"
+               exit 1
+             end
+             $stderr.puts "s4c: compiled #{input_file} → LLVM IR via clang"
+             ll_source
            else
              File.read(input_file)
            end
@@ -103,20 +112,21 @@ end
 
 def usage
   $stderr.puts <<~HELP
-    Usage: ruby s4c.rb INPUT.ll [-o OUTPUT.s4]
+    Usage: s4c INPUT [-o OUTPUT.s4]
 
-    S4C compiles LLVM IR text (.ll) to SUBNEG4 assembly.
+    S4C compiles C (.c) or LLVM IR (.ll) to SUBNEG4 assembly.
+    When given a .c file, clang is invoked automatically.
 
     Options:
       -o FILE    Write output to FILE (default: stdout)
       -r         Add output directive showing return value
       --no-opt   Disable optimization passes
-      -          Read from stdin
+      -          Read LLVM IR from stdin
       -h         Show this help
 
-    Example:
-      clang -S -emit-llvm -O0 -o add.ll add.c
-      ruby s4c.rb add.ll -o add.s4
+    Examples:
+      s4c program.c -o program.s4
+      s4c program.ll -o program.s4
   HELP
 end
 

@@ -1,3 +1,4 @@
 *.s4
 *.o
 .DS_Store
+Gemfile.lock

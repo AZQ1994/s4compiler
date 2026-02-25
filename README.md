@@ -1,20 +1,30 @@
-# S4C — LLVM IR to SUBNEG4 Compiler
+# S4C — C/LLVM IR to SUBNEG4 Compiler
 
-S4C compiles LLVM IR (`.ll`) to SUBNEG4 assembly (`.s4`).
+S4C compiles C (`.c`) or LLVM IR (`.ll`) to SUBNEG4 assembly (`.s4`).
 
 [SUBNEG4](https://en.wikipedia.org/wiki/One-instruction_set_computer#Subtract_and_branch_if_less_than_or_equal_to_zero) is a one-instruction set computer (OISC): each instruction has 4 operands `A B C D` and executes `mem[C] = mem[B] - mem[A]; if result < 0 then goto D`.
+
+## Setup
+
+```bash
+bin/setup
+```
+
+This installs dependencies, checks for clang, and runs the test suite.
+
+**Requirements:** Ruby 3.3+, [clang](https://clang.llvm.org/) (for `.c` input)
 
 ## Quick Start
 
 ```bash
-# Compile C to LLVM IR
-clang -S -emit-llvm -O0 -o program.ll program.c
+# Compile C directly to SUBNEG4 (requires clang)
+./bin/s4c program.c -o program.s4
 
-# Compile LLVM IR to SUBNEG4 assembly
-ruby s4c.rb program.ll -o program.s4
+# Compile LLVM IR to SUBNEG4
+./bin/s4c program.ll -o program.s4
 
-# Or skip the optimizer
-ruby s4c.rb program.ll -o program.s4 --no-opt
+# Skip the optimizer
+./bin/s4c program.c -o program.s4 --no-opt
 ```
 
 ## Pipeline
@@ -70,6 +80,7 @@ Additionally, the lowering phase performs **constant specialization**:
 ## Tests
 
 ```bash
+rake test                           # run all tests
 ruby -Ilib test/test_e2e.rb        # 26 end-to-end tests
 ruby -Ilib test/test_optimizer.rb   # 54 optimizer unit tests
 ```
@@ -80,6 +91,9 @@ Test fixtures include: fibonacci, factorial, collatz, sieve of Eratosthenes, GCD
 
 ```
 s4c.rb              CLI entry point
+bin/
+  s4c               Executable wrapper
+  setup             Environment setup script
 lib/
   parser.rb         Regex-based .ll parser
   ir_nodes.rb       IR data structures
