@@ -32,11 +32,12 @@ module S4C
       @type  = type    # e.g. "i32"
     end
 
-    def var?    = @kind == :var
-    def const?  = @kind == :const
-    def label?  = @kind == :label
-    def raw?    = @kind == :raw
-    def global? = @kind == :global
+    def var?            = @kind == :var
+    def const?          = @kind == :const
+    def label?          = @kind == :label
+    def raw?            = @kind == :raw
+    def global?         = @kind == :global
+    def global_element? = @kind == :global_element
 
     def to_s
       case @kind

@@ -357,6 +357,9 @@ module S4C
         Operand.new(:global, str[1..], type: type)
       elsif str =~ /^-?\d+$/
         Operand.new(:const, str.to_i, type: type)
+      elsif str =~ /^getelementptr\s+inbounds\s+\([^,]+,\s*ptr\s+@([\w.]+)(?:,\s*\w+\s+\d+)*,\s*\w+\s+(\d+)\)/
+        # Inline constant GEP: getelementptr inbounds ([5 x i32], ptr @name, i64 0, i64 INDEX)
+        Operand.new(:global_element, { name: $1, index: $2.to_i }, type: type)
       else
         Operand.new(:raw, str, type: type)
       end

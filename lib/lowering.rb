@@ -1295,6 +1295,7 @@ module S4C
       when :const  then @mem.const(op.value)
       when :label  then bb_label(op.value)
       when :global then resolve_global(op.value)
+      when :global_element then resolve_global_element(op.value[:name], op.value[:index])
       else
         raise "Cannot resolve operand: #{op}"
       end
@@ -1333,6 +1334,16 @@ module S4C
     def resolve_global(name)
       @globals_map ||= {}
       @globals_map[name] || raise("Unknown global: @#{name}")
+    end
+
+    def resolve_global_element(name, index)
+      @global_arrays ||= {}
+      ga = @global_arrays[name]
+      if ga
+        index == 0 ? ga[:base] : "#{ga[:base]}_#{index}"
+      else
+        raise "Unknown global array: @#{name}"
+      end
     end
 
     def mark_pointer(ir_name)
