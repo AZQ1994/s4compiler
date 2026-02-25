@@ -321,4 +321,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 1000, sim.read_label('main___retval')
   end
+
+  def test_matmul
+    # 2x2 matrix multiply: A={{1,2},{3,4}} * B={{5,6},{7,8}} → sum(C) = 134
+    sim, result, _ = compile_and_run(fixture('matmul.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 134, sim.read_label('main___retval')
+  end
 end
