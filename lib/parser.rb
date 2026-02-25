@@ -193,10 +193,11 @@ module S4C
       end
     end
 
-    # "i32, ptr %p, align 4"
+    # "i32, ptr %p, align 4" or "ptr, ptr %p, align 8"
     def parse_load_operands(rest)
       if rest =~ /^(\w+),\s*ptr\s+(.+?)(?:,\s*align\s+\d+)?$/
-        [parse_value($2.strip, 'ptr')]
+        load_type = $1
+        [parse_value($2.strip, 'ptr'), Operand.new(:type, load_type)]
       else
         [Operand.new(:raw, rest)]
       end

@@ -313,4 +313,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 30, sim.read_label('main___retval')
   end
+
+  def test_array_func
+    # Pass array to function, sum elements: {100,200,300,400} → 1000
+    sim, result, _ = compile_and_run(fixture('array_func.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 1000, sim.read_label('main___retval')
+  end
 end

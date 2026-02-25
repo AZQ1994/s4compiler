@@ -73,10 +73,16 @@ module S4C
       param_labels = func.params.map do |_type, name|
         @mem.func_param(func.name, name)
       end
+      param_types = func.params.map { |type, _name| type }
       retval = @mem.func_var(func.name, "__retval")
       # Per-operand label for the D operand of the return jump instruction
       ret_d_label = "#{func.name}_ret_d"
-      @functions[func.name] = { params: param_labels, retval: retval, ret_d_label: ret_d_label }
+      @functions[func.name] = { params: param_labels, param_types: param_types, retval: retval, ret_d_label: ret_d_label }
+
+      # Mark pointer parameters as pointers
+      func.params.each do |type, name|
+        mark_pointer_for(func.name, name) if type == 'ptr'
+      end
     end
 
     def lower_function(func)
@@ -846,21 +852,27 @@ module S4C
           emit PLabel.new("", comment: "GEP fallback: #{inst.raw}")
         end
       elsif base_op
-        # Variable-index GEP: compute base_address + index at runtime
+        # Variable-index GEP: compute address + index at runtime
         base_name = base_op.value
         base_label = fvar(base_name)
 
-        # Get the address-of the base (first element of the array)
-        addr_label = @mem.temp
-        @mem.mark_addr_of(addr_label, base_label)
+        # Determine if base is a pointer (holds an address) or an array (needs &base)
+        if is_pointer?(base_name)
+          # Pointer arithmetic: base already holds an address
+          addr_source = base_label
+        else
+          # Array base: need address-of the base label
+          addr_source = @mem.temp
+          @mem.mark_addr_of(addr_source, base_label)
+        end
 
         # Find the variable index operand (last non-base var operand)
         var_indices = non_base_ops.select { |o| o.var? }
         if var_indices.any?
           index_var = resolve_operand(var_indices.last)
           r = fvar(inst.result)
-          # result = base_address + index
-          emit PAdd.new(index_var, addr_label, r, comment: "GEP #{inst.result} = &#{base_name} + #{op_str(var_indices.last)}")
+          # result = address + index
+          emit PAdd.new(index_var, addr_source, r, comment: "GEP #{inst.result} = #{base_name} + #{op_str(var_indices.last)}")
           # Mark as pointer
           mark_pointer(inst.result)
         else
@@ -873,11 +885,15 @@ module S4C
       end
     end
 
-    # %r = load i32, ptr %p
+    # %r = load i32, ptr %p  or  %r = load ptr, ptr %p
     def lower_load(inst)
       ptr_name = inst.operands[0].var? ? inst.operands[0].value : nil
       ptr = resolve_operand(inst.operands[0])
       r = fvar(inst.result)
+
+      # Check if the load type is ptr (second operand if present)
+      load_type = inst.operands[1]&.value if inst.operands.length > 1 && inst.operands[1].kind == :type
+      mark_pointer(inst.result) if load_type == 'ptr'
 
       if ptr_name && is_pointer?(ptr_name)
         # Indirect load: ptr holds a computed address
@@ -935,8 +951,18 @@ module S4C
       # Copy arguments to callee's parameter slots
       args.each_with_index do |arg, i|
         next unless i < callee[:params].length
-        val = resolve_operand(arg)
-        emit PCp.new(callee[:params][i], val, comment: "arg #{i}: #{op_str(arg)}")
+        param_type = callee[:param_types][i]
+
+        if param_type == 'ptr' && arg.var? && !is_pointer?(arg.value)
+          # Passing address of a non-pointer variable (e.g., array element alias)
+          val = resolve_operand(arg)
+          addr_temp = @mem.temp
+          @mem.mark_addr_of(addr_temp, val)
+          emit PCp.new(callee[:params][i], addr_temp, comment: "arg #{i}: &#{op_str(arg)}")
+        else
+          val = resolve_operand(arg)
+          emit PCp.new(callee[:params][i], val, comment: "arg #{i}: #{op_str(arg)}")
+        end
       end
 
       # Write &ret_label into the callee's return jump D operand (self-modifying)
@@ -1033,6 +1059,10 @@ module S4C
 
     def mark_pointer(ir_name)
       @pointers["#{@current_func}::#{ir_name}"] = true
+    end
+
+    def mark_pointer_for(func_name, ir_name)
+      @pointers["#{func_name}::#{ir_name}"] = true
     end
 
     def is_pointer?(ir_name)
