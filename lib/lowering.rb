@@ -17,6 +17,7 @@ module S4C
       @call_id = 0          # unique ID for each call site
       @builtins = {}        # :mul → { arg1:, arg2:, result:, ret_d: }
       @deferred_subroutines = []
+      @cmp_id = 0           # unique ID for inline comparison labels
     end
 
     # Lower an entire IR module
@@ -42,7 +43,9 @@ module S4C
       # Emit deferred built-in subroutines
       @deferred_subroutines.each do |name|
         case name
-        when :mul then emit_mul_subroutine
+        when :mul  then emit_mul_subroutine
+        when :sdiv then emit_sdiv_subroutine
+        when :srem then emit_srem_subroutine
         end
       end
 
@@ -85,6 +88,8 @@ module S4C
       when 'add'  then lower_add(inst)
       when 'sub'  then lower_sub(inst)
       when 'mul'  then lower_mul(inst)
+      when 'sdiv' then lower_sdiv(inst)
+      when 'srem' then lower_srem(inst)
       when 'ret'  then lower_ret(inst)
       when 'br'   then lower_br(inst)
       when 'icmp' then lower_icmp(inst)
@@ -188,6 +193,118 @@ module S4C
       emit PReturnJump.new(mul[:ret_d], comment: "return from __mul")
     end
 
+    def ensure_sdiv_subroutine
+      return if @builtins[:sdiv]
+
+      dividend = @mem.func_var("__sdiv", "dividend")
+      divisor  = @mem.func_var("__sdiv", "divisor")
+      quotient = @mem.func_var("__sdiv", "quotient")
+      ret_d    = "__sdiv_ret_d"
+
+      @builtins[:sdiv] = { dividend: dividend, divisor: divisor, quotient: quotient, ret_d: ret_d }
+      @deferred_subroutines << :sdiv
+    end
+
+    # Signed division: quotient = dividend / divisor
+    # Algorithm: negate operands if needed, repeated subtraction, fix sign
+    def emit_sdiv_subroutine
+      sdiv = @builtins[:sdiv]
+      dvd  = sdiv[:dividend]
+      dvs  = sdiv[:divisor]
+      q    = sdiv[:quotient]
+      sign = @mem.func_var("__sdiv", "sign")
+      t    = @mem.temp
+      z    = @mem.zero
+      one  = @mem.const(1)
+
+      emit PLabel.new("__sdiv", comment: "built-in: signed division")
+      emit PCp.new(q, z, comment: "quotient = 0")
+      emit PCp.new(sign, z, comment: "sign = 0")
+      # If dividend < 0, negate it and flip sign
+      emit PNeg.new(dvd, "__sdiv_neg_dvd", comment: "if dividend < 0")
+      emit PGoto.new("__sdiv_chk_dvs", comment: "dividend >= 0")
+      emit PLabel.new("__sdiv_neg_dvd")
+      emit PSub.new(dvd, z, dvd, comment: "dividend = -dividend")
+      emit PSub.new(sign, one, sign, comment: "sign = 1 - sign")
+      emit PLabel.new("__sdiv_chk_dvs")
+      # If divisor < 0, negate it and flip sign
+      emit PNeg.new(dvs, "__sdiv_neg_dvs", comment: "if divisor < 0")
+      emit PGoto.new("__sdiv_loop", comment: "divisor >= 0")
+      emit PLabel.new("__sdiv_neg_dvs")
+      emit PSub.new(dvs, z, dvs, comment: "divisor = -divisor")
+      emit PSub.new(sign, one, sign, comment: "sign = 1 - sign")
+      # Loop: while dividend >= divisor
+      emit PLabel.new("__sdiv_loop")
+      emit PSub.new(dvs, dvd, t, comment: "t = dividend - divisor")
+      emit PNeg.new(t, "__sdiv_fixsign", comment: "if t < 0 → done")
+      emit PCp.new(dvd, t, comment: "dividend = t")
+      emit PAdd.new(one, q, q, comment: "quotient += 1")
+      emit PGoto.new("__sdiv_loop", comment: "repeat")
+      # Fix sign
+      emit PLabel.new("__sdiv_fixsign")
+      emit PNeg.new(sign, "__sdiv_negate_q", comment: "if sign < 0 → negate quotient")
+      emit PGoto.new("__sdiv_ret", comment: "sign >= 0, done")
+      emit PLabel.new("__sdiv_negate_q")
+      emit PSub.new(q, z, q, comment: "quotient = -quotient")
+      emit PLabel.new("__sdiv_ret")
+      emit PReturnJump.new(sdiv[:ret_d], comment: "return from __sdiv")
+    end
+
+    def ensure_srem_subroutine
+      return if @builtins[:srem]
+
+      dividend  = @mem.func_var("__srem", "dividend")
+      divisor   = @mem.func_var("__srem", "divisor")
+      remainder = @mem.func_var("__srem", "remainder")
+      ret_d     = "__srem_ret_d"
+
+      @builtins[:srem] = { dividend: dividend, divisor: divisor, remainder: remainder, ret_d: ret_d }
+      @deferred_subroutines << :srem
+    end
+
+    # Signed remainder: remainder = dividend % divisor
+    # Remainder has same sign as dividend
+    def emit_srem_subroutine
+      srem = @builtins[:srem]
+      dvd  = srem[:dividend]
+      dvs  = srem[:divisor]
+      rem  = srem[:remainder]
+      sign = @mem.func_var("__srem", "sign")
+      t    = @mem.temp
+      z    = @mem.zero
+
+      emit PLabel.new("__srem", comment: "built-in: signed remainder")
+      emit PCp.new(sign, z, comment: "sign = 0 (positive)")
+      # If dividend < 0, negate it and record sign
+      emit PNeg.new(dvd, "__srem_neg_dvd", comment: "if dividend < 0")
+      emit PGoto.new("__srem_chk_dvs", comment: "dividend >= 0")
+      emit PLabel.new("__srem_neg_dvd")
+      emit PSub.new(dvd, z, dvd, comment: "dividend = -dividend")
+      c_n1 = @mem.const(-1)
+      emit PCp.new(sign, c_n1, comment: "sign = -1 (negative)")
+      emit PLabel.new("__srem_chk_dvs")
+      # If divisor < 0, negate it (sign of remainder follows dividend, not divisor)
+      emit PNeg.new(dvs, "__srem_neg_dvs", comment: "if divisor < 0")
+      emit PGoto.new("__srem_loop", comment: "divisor >= 0")
+      emit PLabel.new("__srem_neg_dvs")
+      emit PSub.new(dvs, z, dvs, comment: "divisor = -divisor")
+      # Loop: while dividend >= divisor, subtract
+      emit PLabel.new("__srem_loop")
+      emit PSub.new(dvs, dvd, t, comment: "t = dividend - divisor")
+      emit PNeg.new(t, "__srem_done", comment: "if t < 0 → done")
+      emit PCp.new(dvd, t, comment: "dividend = t")
+      emit PGoto.new("__srem_loop", comment: "repeat")
+      # Done: remainder = dividend; apply sign
+      emit PLabel.new("__srem_done")
+      emit PCp.new(rem, dvd, comment: "remainder = dividend")
+      emit PNeg.new(sign, "__srem_negate", comment: "if sign < 0 → negate remainder")
+      emit PGoto.new("__srem_ret", comment: "sign >= 0, done")
+      emit PLabel.new("__srem_negate")
+      emit PSub.new(rem, z, rem, comment: "remainder = -remainder")
+      emit PLabel.new("__srem_ret")
+      emit PReturnJump.new(srem[:ret_d], comment: "return from __srem")
+    end
+
     # ret i32 %val
     def lower_ret(inst)
       info = @functions[@current_func]
@@ -235,9 +352,9 @@ module S4C
       when 'sgt'
         emit PSub.new(a, b, r, comment: "#{inst.result} = #{op_str(inst.operands[1])} > #{op_str(inst.operands[2])}")
       when 'eq'
-        emit PSub.new(b, a, r, comment: "#{inst.result} = #{op_str(inst.operands[1])} == #{op_str(inst.operands[2])} (diff)")
+        lower_icmp_eq(inst, a, b, r)
       when 'ne'
-        emit PSub.new(b, a, r, comment: "#{inst.result} = #{op_str(inst.operands[1])} != #{op_str(inst.operands[2])} (diff)")
+        lower_icmp_ne(inst, a, b, r)
       when 'sle'
         t = @mem.temp
         one = @mem.const(1)
@@ -252,6 +369,92 @@ module S4C
         emit PLabel.new("", comment: "UNSUPPORTED icmp pred: #{pred}")
         fvar(inst.result)
       end
+    end
+
+    # icmp eq: r = -1 if a == b, r = 0 if a != b
+    def lower_icmp_eq(inst, a, b, r)
+      @cmp_id += 1
+      ne_label = "#{@current_func}_cmp_ne_#{@cmp_id}"
+      done_label = "#{@current_func}_cmp_done_#{@cmp_id}"
+      @mem.alloc_label(ne_label)
+      @mem.alloc_label(done_label)
+      diff = @mem.temp
+      neg_diff = @mem.temp
+      c_n1 = @mem.const(-1)
+      z = @mem.zero
+
+      emit PSub.new(b, a, diff, comment: "#{inst.result} = diff(#{op_str(inst.operands[1])}, #{op_str(inst.operands[2])})")
+      emit PCp.new(r, c_n1, comment: "assume eq (r = -1)")
+      emit PNeg.new(diff, ne_label, comment: "if diff < 0 → not eq")
+      emit PSub.new(diff, z, neg_diff, comment: "neg_diff = -diff")
+      emit PNeg.new(neg_diff, ne_label, comment: "if diff > 0 → not eq")
+      emit PGoto.new(done_label, comment: "diff == 0 → eq")
+      emit PLabel.new(ne_label)
+      emit PCp.new(r, z, comment: "not eq (r = 0)")
+      emit PLabel.new(done_label)
+    end
+
+    # icmp ne: r = -1 if a != b, r = 0 if a == b
+    def lower_icmp_ne(inst, a, b, r)
+      @cmp_id += 1
+      ne_label = "#{@current_func}_cmp_ne_#{@cmp_id}"
+      done_label = "#{@current_func}_cmp_done_#{@cmp_id}"
+      @mem.alloc_label(ne_label)
+      @mem.alloc_label(done_label)
+      diff = @mem.temp
+      neg_diff = @mem.temp
+      z = @mem.zero
+
+      emit PSub.new(b, a, diff, comment: "#{inst.result} = diff(#{op_str(inst.operands[1])}, #{op_str(inst.operands[2])})")
+      emit PCp.new(r, z, comment: "assume eq (r = 0)")
+      emit PNeg.new(diff, ne_label, comment: "if diff < 0 → ne")
+      emit PSub.new(diff, z, neg_diff, comment: "neg_diff = -diff")
+      emit PNeg.new(neg_diff, ne_label, comment: "if diff > 0 → ne")
+      emit PGoto.new(done_label, comment: "diff == 0 → eq")
+      emit PLabel.new(ne_label)
+      c_n1 = @mem.const(-1)
+      emit PCp.new(r, c_n1, comment: "ne (r = -1)")
+      emit PLabel.new(done_label)
+    end
+
+    # %r = sdiv i32 %a, %b → call built-in __sdiv subroutine
+    def lower_sdiv(inst)
+      a = resolve_operand(inst.operands[0])
+      b = resolve_operand(inst.operands[1])
+      r = fvar(inst.result)
+      ensure_sdiv_subroutine
+
+      sdiv = @builtins[:sdiv]
+      @call_id += 1
+      ret_label = "#{@current_func}_sdivret#{@call_id}"
+      @mem.alloc_label(ret_label)
+
+      emit PCp.new(sdiv[:dividend], a, comment: "sdiv dividend = #{op_str(inst.operands[0])}")
+      emit PCp.new(sdiv[:divisor], b, comment: "sdiv divisor = #{op_str(inst.operands[1])}")
+      emit PCallSetReturn.new(sdiv[:ret_d], ret_label, comment: "sdiv return addr")
+      emit PGoto.new("__sdiv", comment: "call __sdiv")
+      emit PLabel.new(ret_label, comment: "return from __sdiv")
+      emit PCp.new(r, sdiv[:quotient], comment: "#{inst.result} = sdiv result")
+    end
+
+    # %r = srem i32 %a, %b → call built-in __srem subroutine
+    def lower_srem(inst)
+      a = resolve_operand(inst.operands[0])
+      b = resolve_operand(inst.operands[1])
+      r = fvar(inst.result)
+      ensure_srem_subroutine
+
+      srem = @builtins[:srem]
+      @call_id += 1
+      ret_label = "#{@current_func}_sremret#{@call_id}"
+      @mem.alloc_label(ret_label)
+
+      emit PCp.new(srem[:dividend], a, comment: "srem dividend = #{op_str(inst.operands[0])}")
+      emit PCp.new(srem[:divisor], b, comment: "srem divisor = #{op_str(inst.operands[1])}")
+      emit PCallSetReturn.new(srem[:ret_d], ret_label, comment: "srem return addr")
+      emit PGoto.new("__srem", comment: "call __srem")
+      emit PLabel.new(ret_label, comment: "return from __srem")
+      emit PCp.new(r, srem[:remainder], comment: "#{inst.result} = srem result")
     end
 
     def lower_alloca(inst)

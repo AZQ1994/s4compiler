@@ -241,4 +241,20 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 60, sim.read_label('main___retval')
   end
+
+  def test_eq
+    # int main() { int a=5, b=5; if (a==b) return 42; return 0; } → should return 42
+    sim, result, _ = compile_and_run(fixture('eq_test.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 42, sim.read_label('main___retval')
+  end
+
+  def test_gcd
+    # gcd(48, 18) = 6
+    sim, result, _ = compile_and_run(fixture('gcd.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 6, sim.read_label('main___retval')
+  end
 end
