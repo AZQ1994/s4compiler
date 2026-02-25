@@ -329,4 +329,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 134, sim.read_label('main___retval')
   end
+
+  def test_sieve
+    # Sieve of Eratosthenes: count primes up to 30 = 10
+    sim, result, _ = compile_and_run(fixture('sieve.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 10, sim.read_label('main___retval')
+  end
 end
