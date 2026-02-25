@@ -369,4 +369,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 111, sim.read_label('main___retval')
   end
+
+  def test_fib_o1
+    # fib(10) = 55 compiled with -O1 (tail call, phi nodes, negative constants)
+    sim, result, _ = compile_and_run(fixture('fib_o1.ll'), max_cycles: 100_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 55, sim.read_label('main___retval')
+  end
 end

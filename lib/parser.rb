@@ -104,6 +104,11 @@ module S4C
       line = line.sub(/\s*;.*$/, '').sub(/,?\s*![\w.]+\s+!\d+.*$/, '').strip
       return nil if line.empty?
 
+      # Strip call prefixes: tail, musttail, notail
+      line = line.sub(/\btail\s+call\b/, 'call')
+                 .sub(/\bmusttail\s+call\b/, 'call')
+                 .sub(/\bnotail\s+call\b/, 'call')
+
       # Assignment form: %result = opcode ...
       if line =~ /^%([\w.]+)\s*=\s*(\w+)\s+(.*)/
         result = $1
