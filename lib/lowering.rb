@@ -46,6 +46,11 @@ module S4C
         when :mul  then emit_mul_subroutine
         when :sdiv then emit_sdiv_subroutine
         when :srem then emit_srem_subroutine
+        when :shl  then emit_shl_subroutine
+        when :shr  then emit_shr_subroutine
+        when :and  then emit_and_subroutine
+        when :or   then emit_or_subroutine
+        when :xor  then emit_xor_subroutine
         end
       end
 
@@ -90,6 +95,11 @@ module S4C
       when 'mul'  then lower_mul(inst)
       when 'sdiv' then lower_sdiv(inst)
       when 'srem' then lower_srem(inst)
+      when 'shl'  then lower_shl(inst)
+      when 'ashr', 'lshr' then lower_shr(inst)
+      when 'and'  then lower_bitwise(inst, :and)
+      when 'or'   then lower_bitwise(inst, :or)
+      when 'xor'  then lower_bitwise(inst, :xor)
       when 'ret'  then lower_ret(inst)
       when 'br'   then lower_br(inst)
       when 'icmp' then lower_icmp(inst)
@@ -304,6 +314,340 @@ module S4C
       emit PSub.new(rem, z, rem, comment: "remainder = -remainder")
       emit PLabel.new("__srem_ret")
       emit PReturnJump.new(srem[:ret_d], comment: "return from __srem")
+    end
+
+    # %r = shl i32 %val, N
+    def lower_shl(inst)
+      val = resolve_operand(inst.operands[0])
+      shift_op = inst.operands[1]
+      r = fvar(inst.result)
+
+      if shift_op.const? && shift_op.value <= 8
+        # Inline chain of doublings for small constant shifts
+        n = shift_op.value
+        if n == 0
+          emit PCp.new(r, val, comment: "shl by 0")
+        else
+          current = val
+          n.times do |i|
+            dst = (i == n - 1) ? r : @mem.temp
+            emit PAdd.new(current, current, dst, comment: "shl (double #{i + 1}/#{n})")
+            current = dst
+          end
+        end
+      else
+        # Variable or large constant: call __shl subroutine
+        ensure_shl_subroutine
+        shl = @builtins[:shl]
+        @call_id += 1
+        ret_label = "#{@current_func}_shlret#{@call_id}"
+        @mem.alloc_label(ret_label)
+
+        emit PCp.new(shl[:val], val, comment: "shl val")
+        amt = shift_op.const? ? @mem.const(shift_op.value) : resolve_operand(shift_op)
+        emit PCp.new(shl[:amount], amt, comment: "shl amount")
+        emit PCallSetReturn.new(shl[:ret_d], ret_label, comment: "shl return addr")
+        emit PGoto.new("__shl", comment: "call __shl")
+        emit PLabel.new(ret_label, comment: "return from __shl")
+        emit PCp.new(r, shl[:result], comment: "#{inst.result} = shl result")
+      end
+    end
+
+    # %r = ashr/lshr i32 %val, N → use sdiv by 2^N
+    def lower_shr(inst)
+      val = resolve_operand(inst.operands[0])
+      shift_op = inst.operands[1]
+      r = fvar(inst.result)
+
+      if shift_op.const?
+        n = shift_op.value
+        if n == 0
+          emit PCp.new(r, val, comment: "shr by 0")
+        else
+          divisor = @mem.const(1 << n)
+          ensure_sdiv_subroutine
+          sdiv = @builtins[:sdiv]
+          @call_id += 1
+          ret_label = "#{@current_func}_shrret#{@call_id}"
+          @mem.alloc_label(ret_label)
+
+          emit PCp.new(sdiv[:dividend], val, comment: "shr dividend")
+          emit PCp.new(sdiv[:divisor], divisor, comment: "shr divisor = 2^#{n}")
+          emit PCallSetReturn.new(sdiv[:ret_d], ret_label, comment: "shr return addr")
+          emit PGoto.new("__sdiv", comment: "call __sdiv for shr")
+          emit PLabel.new(ret_label, comment: "return from shr")
+          emit PCp.new(r, sdiv[:quotient], comment: "#{inst.result} = shr result")
+        end
+      else
+        # Variable shift: call __shr subroutine
+        ensure_shr_subroutine
+        shr = @builtins[:shr]
+        @call_id += 1
+        ret_label = "#{@current_func}_shrret#{@call_id}"
+        @mem.alloc_label(ret_label)
+
+        emit PCp.new(shr[:val], val, comment: "shr val")
+        emit PCp.new(shr[:amount], resolve_operand(shift_op), comment: "shr amount")
+        emit PCallSetReturn.new(shr[:ret_d], ret_label, comment: "shr return addr")
+        emit PGoto.new("__shr", comment: "call __shr")
+        emit PLabel.new(ret_label, comment: "return from __shr")
+        emit PCp.new(r, shr[:result], comment: "#{inst.result} = shr result")
+      end
+    end
+
+    # %r = and/or/xor i32 %a, %b → call built-in subroutine
+    def lower_bitwise(inst, op)
+      a = resolve_operand(inst.operands[0])
+      b = resolve_operand(inst.operands[1])
+      r = fvar(inst.result)
+
+      ensure_bitwise_subroutine(op)
+      info = @builtins[op]
+      @call_id += 1
+      ret_label = "#{@current_func}_#{op}ret#{@call_id}"
+      @mem.alloc_label(ret_label)
+
+      emit PCp.new(info[:arg1], a, comment: "#{op} arg1 = #{op_str(inst.operands[0])}")
+      emit PCp.new(info[:arg2], b, comment: "#{op} arg2 = #{op_str(inst.operands[1])}")
+      emit PCallSetReturn.new(info[:ret_d], ret_label, comment: "#{op} return addr")
+      emit PGoto.new("__#{op}", comment: "call __#{op}")
+      emit PLabel.new(ret_label, comment: "return from __#{op}")
+      emit PCp.new(r, info[:result], comment: "#{inst.result} = #{op} result")
+    end
+
+    def ensure_shl_subroutine
+      return if @builtins[:shl]
+      val    = @mem.func_var("__shl", "val")
+      amount = @mem.func_var("__shl", "amount")
+      result = @mem.func_var("__shl", "result")
+      ret_d  = "__shl_ret_d"
+      @builtins[:shl] = { val: val, amount: amount, result: result, ret_d: ret_d }
+      @deferred_subroutines << :shl
+    end
+
+    def emit_shl_subroutine
+      shl = @builtins[:shl]
+      v   = shl[:val]
+      amt = shl[:amount]
+      res = shl[:result]
+      z   = @mem.zero
+      one = @mem.const(1)
+      t   = @mem.temp
+
+      emit PLabel.new("__shl", comment: "built-in: left shift")
+      emit PCp.new(res, v, comment: "result = val")
+      emit PLabel.new("__shl_loop")
+      # Check amount > 0: if -amount < 0 (amount > 0), continue
+      emit PSub.new(amt, z, t, comment: "t = -amount")
+      emit PNeg.new(t, "__shl_body", comment: "if amount > 0 → loop body")
+      emit PGoto.new("__shl_done", comment: "amount <= 0 → done")
+      emit PLabel.new("__shl_body")
+      emit PAdd.new(res, res, res, comment: "result = result * 2")
+      emit PSub.new(one, amt, amt, comment: "amount -= 1")
+      emit PGoto.new("__shl_loop", comment: "repeat")
+      emit PLabel.new("__shl_done")
+      emit PReturnJump.new(shl[:ret_d], comment: "return from __shl")
+    end
+
+    def ensure_shr_subroutine
+      return if @builtins[:shr]
+      val    = @mem.func_var("__shr", "val")
+      amount = @mem.func_var("__shr", "amount")
+      result = @mem.func_var("__shr", "result")
+      ret_d  = "__shr_ret_d"
+      @builtins[:shr] = { val: val, amount: amount, result: result, ret_d: ret_d }
+      @deferred_subroutines << :shr
+    end
+
+    # Right shift via repeated halving (sdiv by 2 loop)
+    def emit_shr_subroutine
+      shr = @builtins[:shr]
+      v   = shr[:val]
+      amt = shr[:amount]
+      res = shr[:result]
+      z   = @mem.zero
+      one = @mem.const(1)
+      two = @mem.const(2)
+      t   = @mem.temp
+
+      emit PLabel.new("__shr", comment: "built-in: right shift")
+      emit PCp.new(res, v, comment: "result = val")
+      emit PLabel.new("__shr_loop")
+      emit PSub.new(amt, z, t, comment: "t = -amount")
+      emit PNeg.new(t, "__shr_body", comment: "if amount > 0 → loop body")
+      emit PGoto.new("__shr_done", comment: "amount <= 0 → done")
+      emit PLabel.new("__shr_body")
+      # Halve: quotient = res / 2 via repeated subtraction
+      # Inline a simple div-by-2: q=0; while res>=2: res-=2, q++
+      q = @mem.func_var("__shr", "q")
+      emit PCp.new(q, z, comment: "q = 0")
+      emit PLabel.new("__shr_half")
+      emit PSub.new(two, res, t, comment: "t = res - 2")
+      emit PNeg.new(t, "__shr_half_done", comment: "if res < 2 → done halving")
+      emit PCp.new(res, t, comment: "res = t")
+      emit PAdd.new(one, q, q, comment: "q++")
+      emit PGoto.new("__shr_half", comment: "repeat halving")
+      emit PLabel.new("__shr_half_done")
+      emit PCp.new(res, q, comment: "res = quotient")
+      emit PSub.new(one, amt, amt, comment: "amount -= 1")
+      emit PGoto.new("__shr_loop", comment: "repeat shift")
+      emit PLabel.new("__shr_done")
+      emit PReturnJump.new(shr[:ret_d], comment: "return from __shr")
+    end
+
+    def ensure_bitwise_subroutine(op)
+      return if @builtins[op]
+      arg1   = @mem.func_var("__#{op}", "arg1")
+      arg2   = @mem.func_var("__#{op}", "arg2")
+      result = @mem.func_var("__#{op}", "result")
+      ret_d  = "__#{op}_ret_d"
+      @builtins[op] = { arg1: arg1, arg2: arg2, result: result, ret_d: ret_d }
+      @deferred_subroutines << op
+    end
+
+    # Bitwise AND: extract bits, AND them, reconstruct (32-bit)
+    def emit_and_subroutine
+      info = @builtins[:and]
+      a1 = info[:arg1]; a2 = info[:arg2]; res = info[:result]
+      z = @mem.zero; one = @mem.const(1); two = @mem.const(2)
+      bit_val = @mem.func_var("__and", "bit_val")
+      cnt     = @mem.func_var("__and", "cnt")
+      t       = @mem.temp
+      b1      = @mem.func_var("__and", "b1")
+      b2      = @mem.func_var("__and", "b2")
+      c32     = @mem.const(32)
+
+      emit PLabel.new("__and", comment: "built-in: bitwise AND")
+      emit PCp.new(res, z, comment: "result = 0")
+      emit PCp.new(bit_val, one, comment: "bit_val = 1")
+      emit PCp.new(cnt, c32, comment: "cnt = 32")
+      emit_bitwise_loop("__and", a1, a2, res, bit_val, cnt, b1, b2, t, z, one, two) { |b1v, b2v, t_var|
+        # AND: result += bit_val only if BOTH bits are 1
+        # b1 * b2: since both are 0 or 1, use: if b1 != 0 AND b2 != 0
+        # Check b1 > 0: -b1 < 0
+        emit PSub.new(b1v, z, t_var, comment: "t = -b1")
+        emit PNeg.new(t_var, "__and_chk2", comment: "if b1 > 0")
+        emit PGoto.new("__and_skip", comment: "b1 == 0, skip")
+        emit PLabel.new("__and_chk2")
+        emit PSub.new(b2v, z, t_var, comment: "t = -b2")
+        emit PNeg.new(t_var, "__and_set", comment: "if b2 > 0")
+        emit PGoto.new("__and_skip", comment: "b2 == 0, skip")
+        emit PLabel.new("__and_set")
+        emit PAdd.new(bit_val, res, res, comment: "result += bit_val")
+        emit PLabel.new("__and_skip")
+      }
+      emit PReturnJump.new(info[:ret_d], comment: "return from __and")
+    end
+
+    # Bitwise OR
+    def emit_or_subroutine
+      info = @builtins[:or]
+      a1 = info[:arg1]; a2 = info[:arg2]; res = info[:result]
+      z = @mem.zero; one = @mem.const(1); two = @mem.const(2)
+      bit_val = @mem.func_var("__or", "bit_val")
+      cnt     = @mem.func_var("__or", "cnt")
+      t       = @mem.temp
+      b1      = @mem.func_var("__or", "b1")
+      b2      = @mem.func_var("__or", "b2")
+      c32     = @mem.const(32)
+
+      emit PLabel.new("__or", comment: "built-in: bitwise OR")
+      emit PCp.new(res, z, comment: "result = 0")
+      emit PCp.new(bit_val, one, comment: "bit_val = 1")
+      emit PCp.new(cnt, c32, comment: "cnt = 32")
+      emit_bitwise_loop("__or", a1, a2, res, bit_val, cnt, b1, b2, t, z, one, two) { |b1v, b2v, t_var|
+        # OR: result += bit_val if EITHER bit is 1
+        emit PSub.new(b1v, z, t_var, comment: "t = -b1")
+        emit PNeg.new(t_var, "__or_set", comment: "if b1 > 0 → set")
+        emit PSub.new(b2v, z, t_var, comment: "t = -b2")
+        emit PNeg.new(t_var, "__or_set", comment: "if b2 > 0 → set")
+        emit PGoto.new("__or_skip", comment: "both 0, skip")
+        emit PLabel.new("__or_set")
+        emit PAdd.new(bit_val, res, res, comment: "result += bit_val")
+        emit PLabel.new("__or_skip")
+      }
+      emit PReturnJump.new(info[:ret_d], comment: "return from __or")
+    end
+
+    # Bitwise XOR
+    def emit_xor_subroutine
+      info = @builtins[:xor]
+      a1 = info[:arg1]; a2 = info[:arg2]; res = info[:result]
+      z = @mem.zero; one = @mem.const(1); two = @mem.const(2)
+      bit_val = @mem.func_var("__xor", "bit_val")
+      cnt     = @mem.func_var("__xor", "cnt")
+      t       = @mem.temp
+      b1      = @mem.func_var("__xor", "b1")
+      b2      = @mem.func_var("__xor", "b2")
+      c32     = @mem.const(32)
+
+      emit PLabel.new("__xor", comment: "built-in: bitwise XOR")
+      emit PCp.new(res, z, comment: "result = 0")
+      emit PCp.new(bit_val, one, comment: "bit_val = 1")
+      emit PCp.new(cnt, c32, comment: "cnt = 32")
+      emit_bitwise_loop("__xor", a1, a2, res, bit_val, cnt, b1, b2, t, z, one, two) { |b1v, b2v, t_var|
+        # XOR: result += bit_val if bits differ
+        # diff = b1 - b2; if diff != 0 → bits differ
+        emit PSub.new(b2v, b1v, t_var, comment: "t = b1 - b2")
+        emit PNeg.new(t_var, "__xor_set", comment: "if t < 0 → differ")
+        emit PSub.new(t_var, z, t_var, comment: "t = -t")
+        emit PNeg.new(t_var, "__xor_set", comment: "if -t < 0 → differ")
+        emit PGoto.new("__xor_skip", comment: "same, skip")
+        emit PLabel.new("__xor_set")
+        emit PAdd.new(bit_val, res, res, comment: "result += bit_val")
+        emit PLabel.new("__xor_skip")
+      }
+      emit PReturnJump.new(info[:ret_d], comment: "return from __xor")
+    end
+
+    # Common bit-extraction loop for bitwise ops
+    # Extracts one bit from each operand per iteration, calls block for the combine logic
+    def emit_bitwise_loop(prefix, a1, a2, _res, bit_val, cnt, b1, b2, t, z, one, two)
+      q1 = @mem.func_var(prefix, "q1")
+      q2 = @mem.func_var(prefix, "q2")
+
+      emit PLabel.new("#{prefix}_loop")
+      # Check cnt > 0
+      emit PSub.new(cnt, z, t, comment: "t = -cnt")
+      emit PNeg.new(t, "#{prefix}_body", comment: "if cnt > 0 → loop body")
+      emit PGoto.new("#{prefix}_done", comment: "cnt <= 0 → done")
+      emit PLabel.new("#{prefix}_body")
+
+      # Extract bit from a1: b1 = a1 % 2 (via a1 - 2*(a1/2))
+      # Simple: halve a1, double it, subtract from original
+      # q1 = a1/2 (repeated subtraction of 2)
+      emit PCp.new(q1, z, comment: "q1 = 0")
+      emit PLabel.new("#{prefix}_div1")
+      emit PSub.new(two, a1, t, comment: "t = a1 - 2")
+      emit PNeg.new(t, "#{prefix}_div1_done", comment: "if a1 < 2 → done")
+      emit PCp.new(a1, t, comment: "a1 -= 2")
+      emit PAdd.new(one, q1, q1, comment: "q1++")
+      emit PGoto.new("#{prefix}_div1", comment: "repeat")
+      emit PLabel.new("#{prefix}_div1_done")
+      # b1 = a1 (remainder: 0 or 1)
+      emit PCp.new(b1, a1, comment: "b1 = a1 % 2")
+      emit PCp.new(a1, q1, comment: "a1 = a1 / 2")
+
+      # Same for a2
+      emit PCp.new(q2, z, comment: "q2 = 0")
+      emit PLabel.new("#{prefix}_div2")
+      emit PSub.new(two, a2, t, comment: "t = a2 - 2")
+      emit PNeg.new(t, "#{prefix}_div2_done", comment: "if a2 < 2 → done")
+      emit PCp.new(a2, t, comment: "a2 -= 2")
+      emit PAdd.new(one, q2, q2, comment: "q2++")
+      emit PGoto.new("#{prefix}_div2", comment: "repeat")
+      emit PLabel.new("#{prefix}_div2_done")
+      emit PCp.new(b2, a2, comment: "b2 = a2 % 2")
+      emit PCp.new(a2, q2, comment: "a2 = a2 / 2")
+
+      # Call combine logic (block)
+      yield b1, b2, t
+
+      # Advance
+      emit PAdd.new(bit_val, bit_val, bit_val, comment: "bit_val *= 2")
+      emit PSub.new(one, cnt, cnt, comment: "cnt -= 1")
+      emit PGoto.new("#{prefix}_loop", comment: "next bit")
+      emit PLabel.new("#{prefix}_done")
     end
 
     # ret i32 %val

@@ -258,6 +258,22 @@ class TestE2E < Minitest::Test
     assert_equal 720, sim.read_label('main___retval')
   end
 
+  def test_shift
+    # 5 << 3 = 40; 100 >> 2 = 25 (constant-folded); 40 + 25 = 65
+    sim, result, _ = compile_and_run(fixture('shift.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 65, sim.read_label('main___retval')
+  end
+
+  def test_bitwise
+    # 0xAB & 0x0F = 11; 0xAB | 0x0F = 175; 0xAB ^ 0x0F = 164; sum = 350
+    sim, result, _ = compile_and_run(fixture('bitwise.ll'), max_cycles: 100_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 350, sim.read_label('main___retval')
+  end
+
   def test_gcd
     # gcd(48, 18) = 6
     sim, result, _ = compile_and_run(fixture('gcd.ll'), max_cycles: 10_000_000)
