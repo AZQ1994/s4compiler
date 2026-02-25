@@ -35,6 +35,7 @@ module S4C
     def var?   = @kind == :var
     def const? = @kind == :const
     def label? = @kind == :label
+    def raw?   = @kind == :raw
 
     def to_s
       case @kind

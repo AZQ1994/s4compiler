@@ -20,6 +20,8 @@ module S4C
       @mem.data_entries.each do |label, value|
         if label == "__stack_SP"
           lines << "#{label}:&stack_top"
+        elsif @mem.addr_of_refs[label]
+          lines << "#{label}:&#{@mem.addr_of_refs[label]}"
         else
           lines << "#{label}:#{value}"
         end

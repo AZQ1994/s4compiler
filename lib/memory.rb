@@ -4,7 +4,7 @@ module S4C
   # Manages variable allocation and name generation for the SUBNEG4 output.
   # All variables are symbolic names — the SUBNEG4 assembler resolves addresses.
   class Memory
-    attr_reader :data_entries, :constants
+    attr_reader :data_entries, :constants, :addr_of_refs
 
     def initialize
       @variables = {}       # "func::ir_name" → SUBNEG4 label name
@@ -13,6 +13,7 @@ module S4C
       @data_entries = []    # ordered list of [label, initial_value]
       @used_names = {}
       @arrays = {}          # "func::ir_name" → [element_label_0, element_label_1, ...]
+      @addr_of_refs = {}    # label → target_label (for &target address-of references)
 
       # Pre-allocate ZERO constant (always needed)
       alloc_const(0)
@@ -107,6 +108,11 @@ module S4C
     # Set a variable key to alias an existing label
     def set_alias(key, label)
       @variables[key] = label
+    end
+
+    # Mark a label as holding the address of another label
+    def mark_addr_of(label, target_label)
+      @addr_of_refs[label] = target_label
     end
 
     # Allocate a label that can be used as a goto target

@@ -18,6 +18,8 @@ module S4C
       @builtins = {}        # :mul → { arg1:, arg2:, result:, ret_d: }
       @deferred_subroutines = []
       @cmp_id = 0           # unique ID for inline comparison labels
+      @pointers = {}        # "func::ir_name" → true (tracks variables that hold computed addresses)
+      @indirect_id = 0      # unique ID for indirect load/store operations
     end
 
     # Lower an entire IR module
@@ -814,26 +816,48 @@ module S4C
 
     # %r = getelementptr inbounds [3 x i32], ptr %base, i64 0, i64 INDEX
     def lower_gep(inst)
-      # operands: [raw:[3 x i32], var:base, const:0, const:index]
-      # For constant indices, resolve to the specific array element label
+      # operands: [raw:[3 x i32], var:base, const:0, const:index] or with var index
       base_op = inst.operands.find { |o| o.var? }
-      index_ops = inst.operands.select { |o| o.const? }
+      non_base_ops = inst.operands.reject { |o| o.raw? || o == base_op }
 
-      if base_op && index_ops.length >= 1
-        # Last constant index is the element index
-        element_idx = index_ops.last.value
+      # Check if all indices are constants
+      all_const = non_base_ops.all? { |o| o.const? }
+
+      if base_op && all_const && non_base_ops.length >= 1
+        # Constant-index GEP: alias to the specific array element
+        element_idx = non_base_ops.last.value
         base_name = base_op.value
 
-        # Look up the array element label
         element_label = @mem.func_array_element(@current_func, base_name, element_idx)
         if element_label
-          # GEP result is an alias to the element
           key = "#{@current_func}::#{inst.result}"
           @mem.set_alias(key, element_label)
         else
           # Fallback: treat as pointer arithmetic
           fvar(inst.result)
           emit PLabel.new("", comment: "GEP fallback: #{inst.raw}")
+        end
+      elsif base_op
+        # Variable-index GEP: compute base_address + index at runtime
+        base_name = base_op.value
+        base_label = fvar(base_name)
+
+        # Get the address-of the base (first element of the array)
+        addr_label = @mem.temp
+        @mem.mark_addr_of(addr_label, base_label)
+
+        # Find the variable index operand (last non-base var operand)
+        var_indices = non_base_ops.select { |o| o.var? }
+        if var_indices.any?
+          index_var = resolve_operand(var_indices.last)
+          r = fvar(inst.result)
+          # result = base_address + index
+          emit PAdd.new(index_var, addr_label, r, comment: "GEP #{inst.result} = &#{base_name} + #{op_str(var_indices.last)}")
+          # Mark as pointer
+          mark_pointer(inst.result)
+        else
+          fvar(inst.result)
+          emit PLabel.new("", comment: "UNSUPPORTED GEP: #{inst.raw}")
         end
       else
         fvar(inst.result)
@@ -843,16 +867,32 @@ module S4C
 
     # %r = load i32, ptr %p
     def lower_load(inst)
+      ptr_name = inst.operands[0].var? ? inst.operands[0].value : nil
       ptr = resolve_operand(inst.operands[0])
       r = fvar(inst.result)
-      emit PCp.new(r, ptr, comment: "load #{inst.result} from #{op_str(inst.operands[0])}")
+
+      if ptr_name && is_pointer?(ptr_name)
+        # Indirect load: ptr holds a computed address
+        id = @indirect_id += 1
+        emit PIndirectLoad.new(r, ptr, "il#{id}", comment: "load #{inst.result} from [#{op_str(inst.operands[0])}]")
+      else
+        emit PCp.new(r, ptr, comment: "load #{inst.result} from #{op_str(inst.operands[0])}")
+      end
     end
 
     # store i32 %v, ptr %p
     def lower_store(inst)
       val = resolve_operand(inst.operands[0])
+      ptr_name = inst.operands[1].var? ? inst.operands[1].value : nil
       ptr = resolve_operand(inst.operands[1])
-      emit PCp.new(ptr, val, comment: "store #{op_str(inst.operands[0])} to #{op_str(inst.operands[1])}")
+
+      if ptr_name && is_pointer?(ptr_name)
+        # Indirect store: ptr holds a computed address
+        id = @indirect_id += 1
+        emit PIndirectStore.new(ptr, val, "is#{id}", comment: "store #{op_str(inst.operands[0])} to [#{op_str(inst.operands[1])}]")
+      else
+        emit PCp.new(ptr, val, comment: "store #{op_str(inst.operands[0])} to #{op_str(inst.operands[1])}")
+      end
     end
 
     # %r = call i32 @func(i32 %a, i32 %b)
@@ -975,6 +1015,14 @@ module S4C
       when :label then "%#{op.value}"
       else op.value.to_s
       end
+    end
+
+    def mark_pointer(ir_name)
+      @pointers["#{@current_func}::#{ir_name}"] = true
+    end
+
+    def is_pointer?(ir_name)
+      @pointers["#{@current_func}::#{ir_name}"]
     end
 
     def emit(op)

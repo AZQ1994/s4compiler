@@ -39,6 +39,8 @@ module S4C
       when PReturnJump    then expand_return_jump(op)
       when PPush          then expand_push(op)
       when PPop           then expand_pop(op)
+      when PIndirectLoad  then expand_indirect_load(op)
+      when PIndirectStore then expand_indirect_store(op)
       when PLabel
         @instructions << [:label, op.name, op.comment]
       when PData
@@ -130,6 +132,32 @@ module S4C
       @instructions << Subneg4.new(z, sp, b_label, 'NEXT', "#{op.comment} (set read addr)")
       # Step 3: Read mem[SP] to dst
       @instructions << [:pop_read, z, b_label, op.dst, op.comment]
+    end
+
+    # PIndirectLoad(dst, addr_var, id): dst = mem[addr_var]
+    # Same pattern as pop_read: patch B operand with addr_var's value, then read
+    # 1. Copy addr_var into B operand of read instruction
+    # 2. Read: dst = mem[addr_var] via patched B operand
+    def expand_indirect_load(op)
+      z = @mem.zero
+      b_label = "iload_b_#{op.id}"
+      # Step 1: Copy addr_var to B operand of read instruction
+      @instructions << Subneg4.new(z, op.addr_var, b_label, 'NEXT', "#{op.comment} (set read addr)")
+      # Step 2: Read mem[addr_var] into dst (B operand patched)
+      @instructions << [:pop_read, z, b_label, op.dst, op.comment]
+    end
+
+    # PIndirectStore(addr_var, val, id): mem[addr_var] = val
+    # Same pattern as push_write: patch C operand with addr_var's value, then write
+    # 1. Copy addr_var into C operand of write instruction
+    # 2. Write: mem[addr_var] = val via patched C operand
+    def expand_indirect_store(op)
+      z = @mem.zero
+      c_label = "istore_c_#{op.id}"
+      # Step 1: Copy addr_var to C operand of write instruction
+      @instructions << Subneg4.new(z, op.addr_var, c_label, 'NEXT', "#{op.comment} (set write addr)")
+      # Step 2: Write val to mem[addr_var] (C operand patched)
+      @instructions << [:push_write, z, op.val, c_label, op.comment]
     end
 
     # PCallSetReturn(ret_d_label, return_label):

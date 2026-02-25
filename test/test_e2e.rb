@@ -289,4 +289,20 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 111, sim.read_label('main___retval')
   end
+
+  def test_array_sum
+    # Sum array with variable index: a[0..4] = {10,20,30,40,50} → sum = 150
+    sim, result, _ = compile_and_run(fixture('array_sum.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 150, sim.read_label('main___retval')
+  end
+
+  def test_bubble_sort
+    # Bubble sort [50,20,40,10,30] → [10,20,30,40,50]; return a[0]+a[4] = 60
+    sim, result, _ = compile_and_run(fixture('bubble_sort.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 60, sim.read_label('main___retval')
+  end
 end

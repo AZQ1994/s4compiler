@@ -161,4 +161,34 @@ module S4C
 
     def to_s = "P_POP #{@dst}"
   end
+
+  # P_INDIRECT_LOAD(dst, addr_var, id): dst = mem[addr_var]
+  # Self-modifying: patches B operand of a read instruction with addr_var's value
+  class PIndirectLoad < PseudoOp
+    attr_reader :dst, :addr_var, :id
+
+    def initialize(dst, addr_var, id, comment: "")
+      super(comment: comment)
+      @dst = dst
+      @addr_var = addr_var
+      @id = id
+    end
+
+    def to_s = "P_ILOAD #{@dst}, [#{@addr_var}]"
+  end
+
+  # P_INDIRECT_STORE(addr_var, val, id): mem[addr_var] = val
+  # Self-modifying: patches C operand of a write instruction with addr_var's value
+  class PIndirectStore < PseudoOp
+    attr_reader :addr_var, :val, :id
+
+    def initialize(addr_var, val, id, comment: "")
+      super(comment: comment)
+      @addr_var = addr_var
+      @val = val
+      @id = id
+    end
+
+    def to_s = "P_ISTORE [#{@addr_var}], #{@val}"
+  end
 end
