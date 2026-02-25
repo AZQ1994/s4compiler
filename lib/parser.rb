@@ -260,7 +260,7 @@ module S4C
     # "i32 @func(i32 noundef %a, i32 noundef %b)"
     def parse_call_operands(rest)
       if rest =~ /^(\w+)\s+@([\w.]+)\(([^)]*)\)/
-        ret_type = $1
+        _ret_type = $1
         func_name = $2
         args = $3.split(',').map(&:strip).reject(&:empty?).map do |a|
           parts = a.split(/\s+/)

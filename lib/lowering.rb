@@ -452,7 +452,7 @@ module S4C
       end
     end
 
-    # %r = ashr/lshr i32 %val, N → use sdiv by 2^N
+    # %r = ashr/lshr i32 %val, N → use __shr subroutine (N halvings, faster than sdiv for large values)
     def lower_shr(inst)
       val = resolve_operand(inst.operands[0])
       shift_op = inst.operands[1]
@@ -462,36 +462,23 @@ module S4C
         n = shift_op.value
         if n == 0
           emit PCp.new(r, val, comment: "shr by 0")
-        else
-          divisor = @mem.const(1 << n)
-          ensure_sdiv_subroutine
-          sdiv = @builtins[:sdiv]
-          @call_id += 1
-          ret_label = "#{@current_func}_shrret#{@call_id}"
-          @mem.alloc_label(ret_label)
-
-          emit PCp.new(sdiv[:dividend], val, comment: "shr dividend")
-          emit PCp.new(sdiv[:divisor], divisor, comment: "shr divisor = 2^#{n}")
-          emit PCallSetReturn.new(sdiv[:ret_d], ret_label, comment: "shr return addr")
-          emit PGoto.new("__sdiv", comment: "call __sdiv for shr")
-          emit PLabel.new(ret_label, comment: "return from shr")
-          emit PCp.new(r, sdiv[:quotient], comment: "#{inst.result} = shr result")
+          return
         end
-      else
-        # Variable shift: call __shr subroutine
-        ensure_shr_subroutine
-        shr = @builtins[:shr]
-        @call_id += 1
-        ret_label = "#{@current_func}_shrret#{@call_id}"
-        @mem.alloc_label(ret_label)
-
-        emit PCp.new(shr[:val], val, comment: "shr val")
-        emit PCp.new(shr[:amount], resolve_operand(shift_op), comment: "shr amount")
-        emit PCallSetReturn.new(shr[:ret_d], ret_label, comment: "shr return addr")
-        emit PGoto.new("__shr", comment: "call __shr")
-        emit PLabel.new(ret_label, comment: "return from __shr")
-        emit PCp.new(r, shr[:result], comment: "#{inst.result} = shr result")
       end
+
+      # Use __shr subroutine for both constant and variable shifts
+      ensure_shr_subroutine
+      shr = @builtins[:shr]
+      @call_id += 1
+      ret_label = "#{@current_func}_shrret#{@call_id}"
+      @mem.alloc_label(ret_label)
+
+      emit PCp.new(shr[:val], val, comment: "shr val")
+      emit PCp.new(shr[:amount], resolve_operand(shift_op), comment: "shr amount#{shift_op.const? ? " = #{shift_op.value}" : ''}")
+      emit PCallSetReturn.new(shr[:ret_d], ret_label, comment: "shr return addr")
+      emit PGoto.new("__shr", comment: "call __shr")
+      emit PLabel.new(ret_label, comment: "return from __shr")
+      emit PCp.new(r, shr[:result], comment: "#{inst.result} = shr result")
     end
 
     # %r = and/or/xor i32 %a, %b → call built-in subroutine
@@ -838,6 +825,14 @@ module S4C
         one = @mem.const(1)
         emit PSub.new(a, b, t, comment: "#{inst.result} = #{op_str(inst.operands[2])} - #{op_str(inst.operands[1])}")
         emit PSub.new(one, t, r, comment: "#{inst.result} = diff - 1 (sge)")
+      when 'ult'
+        lower_icmp_unsigned(inst, a, b, r, :lt)
+      when 'ugt'
+        lower_icmp_unsigned(inst, b, a, r, :lt)
+      when 'ule'
+        lower_icmp_unsigned(inst, a, b, r, :le)
+      when 'uge'
+        lower_icmp_unsigned(inst, b, a, r, :le)
       else
         emit PLabel.new("", comment: "UNSUPPORTED icmp pred: #{pred}")
         fvar(inst.result)
@@ -887,6 +882,62 @@ module S4C
       emit PLabel.new(ne_label)
       c_n1 = @mem.const(-1)
       emit PCp.new(r, c_n1, comment: "ne (r = -1)")
+      emit PLabel.new(done_label)
+    end
+
+    # icmp unsigned: ult/ugt/ule/uge via sign-bit branching
+    # For same-sign operands, unsigned order == signed order.
+    # For different signs, negative value is larger unsigned (high bit set).
+    def lower_icmp_unsigned(inst, a, b, r, mode)
+      @cmp_id += 1
+      id = @cmp_id
+      z = @mem.zero
+      c_n1 = @mem.const(-1)
+      neg_a = @mem.temp
+      neg_b = @mem.temp
+
+      a_neg_label = @mem.alloc_label("#{@current_func}_ucmp_aneg#{id}")
+      same_sign_label = @mem.alloc_label("#{@current_func}_ucmp_same#{id}")
+      true_label = @mem.alloc_label("#{@current_func}_ucmp_true#{id}")
+      false_label = @mem.alloc_label("#{@current_func}_ucmp_false#{id}")
+      done_label = @mem.alloc_label("#{@current_func}_ucmp_done#{id}")
+
+      # Check sign of a: neg_a = 0 - a; if neg_a < 0 (a > 0), fall through; if a < 0, goto a_neg
+      emit PSub.new(a, z, neg_a, comment: "ucmp: neg_a = -a")
+      emit PNeg.new(neg_a, a_neg_label, comment: "ucmp: if a < 0 goto a_neg")
+
+      # a >= 0: check sign of b
+      emit PSub.new(b, z, neg_b, comment: "ucmp: neg_b = -b")
+      emit PNeg.new(neg_b, true_label, comment: "ucmp: a>=0, b<0 → a < b unsigned")
+      # a >= 0, b >= 0 → same sign
+      emit PGoto.new(same_sign_label, comment: "ucmp: both non-negative")
+
+      # a < 0:
+      emit PLabel.new(a_neg_label)
+      emit PSub.new(b, z, neg_b, comment: "ucmp: neg_b = -b")
+      emit PNeg.new(neg_b, same_sign_label, comment: "ucmp: both negative → same sign")
+      # a < 0, b >= 0 → a > b unsigned → not (a < b)
+      emit PGoto.new(false_label, comment: "ucmp: a<0, b>=0 → a > b unsigned")
+
+      # Both same sign → use signed comparison
+      emit PLabel.new(same_sign_label)
+      if mode == :lt
+        emit PSub.new(b, a, r, comment: "ucmp: signed lt (same sign)")
+      else # :le
+        t = @mem.temp
+        one = @mem.const(1)
+        emit PSub.new(b, a, t, comment: "ucmp: signed le (same sign)")
+        emit PSub.new(one, t, r, comment: "ucmp: diff - 1 (le)")
+      end
+      emit PGoto.new(done_label, comment: "ucmp: done")
+
+      emit PLabel.new(true_label)
+      emit PCp.new(r, c_n1, comment: "ucmp: result = true (-1)")
+      emit PGoto.new(done_label, comment: "ucmp: done")
+
+      emit PLabel.new(false_label)
+      emit PCp.new(r, z, comment: "ucmp: result = false (0)")
+
       emit PLabel.new(done_label)
     end
 
@@ -1187,7 +1238,6 @@ module S4C
         # if diff < 0, not equal
         emit PNeg.new(diff, not_eq_label, comment: "switch: diff < 0 → skip")
         # if -diff < 0 (diff > 0), not equal
-        t = @mem.temp
         emit PSub.new(diff, @mem.zero, neg_diff, comment: "switch: negate diff")
         emit PNeg.new(neg_diff, not_eq_label, comment: "switch: -diff < 0 → skip")
         # diff == 0 → match!

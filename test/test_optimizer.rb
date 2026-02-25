@@ -228,7 +228,6 @@ class TestOptimizer < Minitest::Test
     ]
     opt = S4C::Optimizer.new(ops, @mem)
     result = opt.optimize
-    copies = result.select { |op| op.is_a?(S4C::PCp) && op.dst == retval }
     # The copy after "block2" label should use t (not x)
     block2_copy = nil
     seen_block2 = false

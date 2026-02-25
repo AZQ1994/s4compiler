@@ -45,7 +45,7 @@ This installs dependencies, checks for clang, and runs the test suite.
 
 - **Arithmetic**: `add`, `sub`, `mul`, `sdiv`, `srem`
 - **Bitwise**: `and`, `or`, `xor`, `shl`, `ashr`, `lshr`
-- **Comparisons**: `icmp` (`slt`, `sgt`, `sle`, `sge`, `eq`, `ne`)
+- **Comparisons**: `icmp` (`slt`, `sgt`, `sle`, `sge`, `ult`, `ugt`, `ule`, `uge`, `eq`, `ne`)
 - **Control flow**: `br` (conditional/unconditional), `select`, `phi`
 - **Memory**: `alloca` (scalar/array), `load`, `store`, `getelementptr`
 - **Functions**: `call` with save/restore (recursion-safe), `ret`, multi-function
@@ -111,7 +111,6 @@ test/
 
 ## Limitations
 
-- No unsigned comparisons (`ult`, `ugt`, `ule`, `uge`)
 - No floating point
 - No i8/string handling (everything is word-sized)
 - No struct support
