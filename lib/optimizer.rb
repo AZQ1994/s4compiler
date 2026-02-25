@@ -5,8 +5,8 @@ require 'set'
 
 module S4C
   # Optimizes pseudo-op sequences between Lowering and Expander.
-  # Runs iterative passes: GotoNext, GotoChain, Unreachable, DeadLabel,
-  # ConstFold, StrengthRed, CopyProp, DeadStore.
+  # Runs iterative passes: GotoNext, GotoChain, RedundantBranch, Unreachable,
+  # DeadLabel, ConstFold, StrengthRed, Peephole, CopyProp, DeadStore, PushPop.
   class Optimizer
     attr_reader :stats
 
@@ -23,17 +23,24 @@ module S4C
       # If so, array elements must be protected from DSE across all iterations.
       @has_indirect = @ops.any? { |op| op.is_a?(PIndirectLoad) || op.is_a?(PIndirectStore) }
 
+      # Pre-compute jump targets for copy propagation single-predecessor extension
+      compute_jump_targets
+
       10.times do |i|
         @stats[:iterations] = i + 1
         changed = false
         changed |= goto_next_elimination
         changed |= goto_chain_simplification
+        changed |= redundant_branch_elimination
         changed |= unreachable_code_elimination
         changed |= dead_label_elimination
         changed |= constant_folding
         changed |= strength_reduction
+        changed |= peephole_double_negation
         changed |= copy_propagation
         changed |= dead_store_elimination
+        changed |= push_pop_elimination
+        compute_jump_targets if changed  # recompute for next iteration
         break unless changed
       end
       @stats[:removed] = original_count - @ops.length
@@ -100,6 +107,18 @@ module S4C
     # Is this op an unconditional control transfer?
     def unconditional_transfer?(op)
       op.is_a?(PGoto) || op.is_a?(PHalt) || op.is_a?(PReturnJump)
+    end
+
+    # Compute set of labels that are jump targets (for copy prop single-pred extension)
+    def compute_jump_targets
+      @jump_targets = Set.new
+      @ops.each do |op|
+        case op
+        when PGoto then @jump_targets << op.label
+        when PNeg  then @jump_targets << op.label
+        when PCallSetReturn then @jump_targets << op.return_label
+        end
+      end
     end
 
     # Build inverse constant map: label_name → integer value (only true constants)
@@ -191,7 +210,27 @@ module S4C
       changed
     end
 
-    # ── Pass 3: UnreachableCodeElimination ────────────────────────────
+    # ── Pass 3: RedundantBranchElimination ──────────────────────────────
+    # PNeg(x, L) followed by PGoto(L) → both paths go to L → PGoto(L)
+
+    def redundant_branch_elimination
+      changed = false
+      result = []
+      @ops.each_with_index do |op, i|
+        if op.is_a?(PNeg)
+          nxt = @ops[i + 1]
+          if nxt.is_a?(PGoto) && nxt.label == op.label
+            changed = true
+            next # skip PNeg, keep PGoto
+          end
+        end
+        result << op
+      end
+      @ops = result
+      changed
+    end
+
+    # ── Pass 4: UnreachableCodeElimination ────────────────────────────
 
     def unreachable_code_elimination
       changed = false
@@ -350,20 +389,58 @@ module S4C
       changed
     end
 
-    # ── Pass 7: CopyPropagation ───────────────────────────────────────
+    # ── Pass 8: PeepholeDoubleNegation ──────────────────────────────────
+    # PSub(x, ZERO, t); PSub(t, ZERO, r) → t=-x; r=-(-x)=x → PCp(r, x)
+
+    def peephole_double_negation
+      changed = false
+      const_map = build_constant_map
+      zero_labels = Set.new
+      const_map.each { |label, val| zero_labels << label if val == 0 }
+
+      result = []
+      i = 0
+      while i < @ops.length
+        op = @ops[i]
+        nxt = @ops[i + 1]
+        if op.is_a?(PSub) && nxt.is_a?(PSub) &&
+           zero_labels.include?(op.b) && zero_labels.include?(nxt.b) &&
+           op.c == nxt.a
+          # op:  PSub(x, ZERO, t) → t = -x
+          # nxt: PSub(t, ZERO, r) → r = -t = x
+          result << op  # keep first negation (DSE removes if t unused)
+          result << PCp.new(nxt.c, op.a, comment: nxt.comment)
+          changed = true
+          i += 2
+        else
+          result << op
+          i += 1
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
+    # ── Pass 9: CopyPropagation ───────────────────────────────────────
     # Single-pass forward substitution within straight-line blocks.
     # Resets substitution map at PLabel and barrier boundaries.
+    # Extension: keeps subst alive across PLabel with single fallthrough predecessor.
 
     def copy_propagation
       changed = false
       subst = {}
       result = []
+      prev_falls_through = true  # track if previous op falls through
 
       @ops.each do |op|
-        # Reset substitution map at block boundaries
+        # At block boundaries: reset unless single fallthrough predecessor
         if op.is_a?(PLabel)
-          subst = {}
+          if @jump_targets.include?(op.name) || !prev_falls_through
+            subst = {}
+          end
           result << op
+          prev_falls_through = true
           next
         end
 
@@ -396,7 +473,10 @@ module S4C
 
         # Reset substitutions after unconditional transfers and conditional branches
         if unconditional_transfer?(op) || op.is_a?(PNeg)
+          prev_falls_through = unconditional_transfer?(op) ? false : true
           subst = {}
+        else
+          prev_falls_through = true
         end
       end
 
@@ -497,6 +577,68 @@ module S4C
 
       @ops = result
       changed
+    end
+
+    # ── Pass 11: PushPopElimination ──────────────────────────────────
+    # Remove PPush/PPop pairs where the restored value is never used.
+    # Standard DSE can't catch this because PPush reads the variable,
+    # creating a circular dependency. We break it by excluding PPush reads.
+
+    def push_pop_elimination
+      # Build used set excluding PPush reads to break circular dependency
+      used_without_push = Set.new
+      @ops.each do |op|
+        next if op.is_a?(PPush)
+        reads(op).each { |v| used_without_push << v }
+      end
+
+      # Also include special references
+      @ops.each do |op|
+        case op
+        when PGoto then used_without_push << op.label
+        when PNeg  then used_without_push << op.label
+        when PCallSetReturn
+          used_without_push << op.ret_d_label
+          used_without_push << op.return_label
+        when PReturnJump then used_without_push << op.d_label
+        end
+      end
+
+      # Find removable PPop indices
+      removable_pop_indices = Set.new
+      @ops.each_with_index do |op, i|
+        if op.is_a?(PPop) && !used_without_push.include?(op.dst) && !protected_var?(op.dst)
+          removable_pop_indices << i
+        end
+      end
+
+      return false if removable_pop_indices.empty?
+
+      # For each removable PPop, find the matching PPush
+      removable_push_indices = Set.new
+      removable_pop_indices.each do |pop_idx|
+        pop_op = @ops[pop_idx]
+        # Extract call_id from pop_id (format: "C_rN")
+        call_id = pop_op.pop_id.sub(/_r\d+$/, '')
+        var = pop_op.dst
+
+        # Search backwards for matching PPush (same call_id, same variable)
+        (0...pop_idx).reverse_each do |j|
+          push_op = @ops[j]
+          if push_op.is_a?(PPush) && push_op.val == var
+            push_call_id = push_op.push_id.sub(/_s\d+$/, '')
+            if push_call_id == call_id
+              removable_push_indices << j
+              break
+            end
+          end
+        end
+      end
+
+      # Remove marked ops
+      to_remove = removable_pop_indices | removable_push_indices
+      @ops = @ops.each_with_index.reject { |_, i| to_remove.include?(i) }.map(&:first)
+      true
     end
   end
 end

@@ -212,20 +212,35 @@ class TestOptimizer < Minitest::Test
     assert_equal x, adds[0].a
   end
 
-  def test_copy_prop_stops_at_label
+  def test_copy_prop_stops_at_jump_target_label
+    # Label "block2" is a jump target from PNeg → multi-predecessor → subst resets
     x = @mem.func_var("f", "x")
     t = @mem.func_var("f", "t")
+    y = @mem.func_var("f", "y")
     ops = [
       S4C::PCp.new(t, x),
+      S4C::PNeg.new(y, "block2"),        # makes "block2" a jump target
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
       S4C::PLabel.new("block2"),
-      S4C::PCp.new(retval, t),   # should NOT substitute t→x (label boundary)
+      S4C::PCp.new(retval, t),           # should NOT substitute t→x
       S4C::PHalt.new,
     ]
     opt = S4C::Optimizer.new(ops, @mem)
     result = opt.optimize
     copies = result.select { |op| op.is_a?(S4C::PCp) && op.dst == retval }
-    assert_equal 1, copies.length
-    assert_equal t, copies[0].src  # NOT x
+    # The copy after "block2" label should use t (not x)
+    block2_copy = nil
+    seen_block2 = false
+    result.each do |op|
+      seen_block2 = true if op.is_a?(S4C::PLabel) && op.name == "block2"
+      if seen_block2 && op.is_a?(S4C::PCp) && op.dst == retval
+        block2_copy = op
+        break
+      end
+    end
+    assert block2_copy, "Should have a PCp to retval after block2"
+    assert_equal t, block2_copy.src  # NOT x
   end
 
   def test_self_copy_removed
@@ -550,6 +565,136 @@ class TestOptimizer < Minitest::Test
     opt = S4C::Optimizer.new(ops, @mem)
     result = opt.optimize
     assert result.any? { |op| op.is_a?(S4C::PHalt) }
+  end
+
+  # ── PeepholeDoubleNegation ───────────────────────────────────
+
+  def test_double_negation_folded
+    x = @mem.func_var("f", "x")
+    t = @mem.func_var("f", "t")
+    z = @mem.zero
+    ops = [
+      S4C::PSub.new(x, z, t),        # t = -x
+      S4C::PSub.new(t, z, retval),   # retval = -t = x → PCp(retval, x)
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    copies = result.select { |op| op.is_a?(S4C::PCp) && op.dst == retval }
+    assert_equal 1, copies.length
+    assert_equal x, copies[0].src
+  end
+
+  def test_single_negation_preserved
+    x = @mem.func_var("f", "x")
+    z = @mem.zero
+    ops = [
+      S4C::PSub.new(x, z, retval),   # retval = -x (single negation, keep)
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PSub) }
+  end
+
+  # ── RedundantBranchElimination ─────────────────────────────────
+
+  def test_redundant_neg_goto_same_label
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PNeg.new(x, "target"),
+      S4C::PGoto.new("target"),
+      S4C::PLabel.new("other"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+      S4C::PLabel.new("target"),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    # PNeg should be removed, PGoto kept
+    refute result.any? { |op| op.is_a?(S4C::PNeg) }
+    assert result.any? { |op| op.is_a?(S4C::PGoto) }
+  end
+
+  def test_neg_goto_different_labels_kept
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PNeg.new(x, "target_a"),
+      S4C::PGoto.new("target_b"),
+      S4C::PLabel.new("target_a"),
+      S4C::PCp.new(retval, x),
+      S4C::PHalt.new,
+      S4C::PLabel.new("target_b"),
+      S4C::PCp.new(retval, @mem.zero),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PNeg) }
+  end
+
+  # ── CopyProp single-predecessor extension ──────────────────────
+
+  def test_copy_prop_across_single_pred_label
+    # Label "block2" is NOT a jump target and previous falls through → propagate
+    x = @mem.func_var("f", "x")
+    t = @mem.func_var("f", "t")
+    ops = [
+      S4C::PCp.new(t, x),
+      S4C::PLabel.new("block2"),         # single fallthrough predecessor
+      S4C::PCp.new(retval, t),           # should substitute t→x
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    copies = result.select { |op| op.is_a?(S4C::PCp) && op.dst == retval }
+    assert_equal 1, copies.length
+    assert_equal x, copies[0].src  # propagated across label
+  end
+
+  # ── PushPopElimination ─────────────────────────────────────────
+
+  def test_push_pop_dead_pair_removed
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PPush.new(x, "1_s0"),
+      S4C::PPop.new(x, "1_r0"),
+      S4C::PCp.new(retval, @mem.zero),  # x is never read
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    refute result.any? { |op| op.is_a?(S4C::PPush) }
+    refute result.any? { |op| op.is_a?(S4C::PPop) }
+  end
+
+  def test_push_pop_live_pair_kept
+    x = @mem.func_var("f", "x")
+    ops = [
+      S4C::PPush.new(x, "1_s0"),
+      S4C::PPop.new(x, "1_r0"),
+      S4C::PCp.new(retval, x),          # x IS read
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PPush) }
+    assert result.any? { |op| op.is_a?(S4C::PPop) }
+  end
+
+  def test_push_pop_protected_var_kept
+    rv = @mem.func_var("f", "__retval")
+    ops = [
+      S4C::PPush.new(rv, "1_s0"),
+      S4C::PPop.new(rv, "1_r0"),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PPush) }
+    assert result.any? { |op| op.is_a?(S4C::PPop) }
   end
 
   # ── Combined: new passes interact with existing ────────────────
