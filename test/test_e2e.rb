@@ -404,4 +404,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 4, sim.read_label('main___retval')
   end
+
+  def test_global_array
+    # Global array with initializer: sum_array({50,20,40,10,30}, 5) = 150
+    sim, result, _ = compile_and_run(fixture('global_array.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 150, sim.read_label('main___retval')
+  end
 end

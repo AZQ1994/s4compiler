@@ -50,7 +50,7 @@ This installs dependencies, checks for clang, and runs the test suite.
 - **Memory**: `alloca` (scalar/array), `load`, `store`, `getelementptr`
 - **Functions**: `call` with save/restore (recursion-safe), `ret`, multi-function
 - **Pointers**: `ptr` parameters, indirect load/store, passing arrays
-- **Global variables**
+- **Global variables** (scalars and initialized arrays)
 - **Casts**: `sext`, `zext`, `trunc`, `bitcast`
 
 ## Optimizer

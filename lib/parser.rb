@@ -13,7 +13,29 @@ module S4C
       while i < lines.length
         line = lines[i]
 
-        # Global variable declaration: @name = [common] [dso_local] global i32 VALUE, align N
+        # Global array declaration: @name = global [N x i32] [i32 v0, i32 v1, ...], align N
+        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+\[([^\]]+)\]/
+          name = $1
+          size = $2.to_i
+          elem_type = $3
+          # Extract values after type prefixes (e.g., "i32 50, i32 20" → [50, 20])
+          values = $4.scan(/\w+\s+(-?\d+)/).flatten.map(&:to_i)
+          mod.globals << { name: name, type: elem_type, array: true, size: size, values: values }
+          i += 1
+          next
+        end
+
+        # Global array zeroinitializer: @name = global [N x i32] zeroinitializer
+        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+zeroinitializer/
+          name = $1
+          size = $2.to_i
+          elem_type = $3
+          mod.globals << { name: name, type: elem_type, array: true, size: size, values: Array.new(size, 0) }
+          i += 1
+          next
+        end
+
+        # Global scalar declaration: @name = [common] [dso_local] global i32 VALUE, align N
         if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak)\s+)*(?:global|constant)\s+(\w+)\s+(-?\d+)/
           name = $1
           type = $2

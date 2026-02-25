@@ -55,6 +55,18 @@ module S4C
       label
     end
 
+    # Allocate a global array with initial values
+    # Returns the base label (first element)
+    def alloc_global_array(base_label, values)
+      base_label = unique_name(base_label) if @used_names[base_label]
+      values.each_with_index do |v, idx|
+        elem_label = idx == 0 ? base_label : "#{base_label}_#{idx}"
+        @used_names[elem_label] = true
+        @data_entries << [elem_label, v]
+      end
+      base_label
+    end
+
     # Backward compat: unscoped var (for single-function programs)
     def var(ir_name)
       func_var("_", ir_name)

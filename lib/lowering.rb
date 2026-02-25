@@ -25,11 +25,18 @@ module S4C
     # Lower an entire IR module
     def lower(ir_module)
       # Allocate global variables in the data section
+      @globals_map ||= {}
       ir_module.globals.each do |g|
         label = "global_#{g[:name]}"
-        @mem.alloc_global(label, g[:value])
-        @globals_map ||= {}
-        @globals_map[g[:name]] = label
+        if g[:array]
+          @mem.alloc_global_array(label, g[:values])
+          @globals_map[g[:name]] = label
+          @global_arrays ||= {}
+          @global_arrays[g[:name]] = { base: label, size: g[:size] }
+        else
+          @mem.alloc_global(label, g[:value])
+          @globals_map[g[:name]] = label
+        end
       end
 
       # First pass: register all functions and their params
@@ -1031,39 +1038,60 @@ module S4C
     # %r = getelementptr inbounds [3 x i32], ptr %base, i64 0, i64 INDEX
     def lower_gep(inst)
       # operands: [raw:[3 x i32], var:base, const:0, const:index] or with var index
-      base_op = inst.operands.find { |o| o.var? }
+      # base can be a local var or a global (@data)
+      base_op = inst.operands.find { |o| o.var? || o.global? }
       non_base_ops = inst.operands.reject { |o| o.raw? || o == base_op }
+
+      is_global_base = base_op&.global?
 
       # Check if all indices are constants
       all_const = non_base_ops.all? { |o| o.const? }
 
       if base_op && all_const && non_base_ops.length >= 1
-        # Constant-index GEP: alias to the specific array element
         element_idx = non_base_ops.last.value
-        base_name = base_op.value
 
-        element_label = @mem.func_array_element(@current_func, base_name, element_idx)
-        if element_label
-          key = "#{@current_func}::#{inst.result}"
-          @mem.set_alias(key, element_label)
+        if is_global_base
+          # Constant-index GEP on global array: alias to the element
+          @global_arrays ||= {}
+          ga = @global_arrays[base_op.value]
+          if ga && element_idx >= 0 && element_idx < ga[:size]
+            elem_label = element_idx == 0 ? ga[:base] : "#{ga[:base]}_#{element_idx}"
+            key = "#{@current_func}::#{inst.result}"
+            @mem.set_alias(key, elem_label)
+          else
+            fvar(inst.result)
+            emit PLabel.new("", comment: "GEP global fallback: #{inst.raw}")
+          end
         else
-          # Fallback: treat as pointer arithmetic
-          fvar(inst.result)
-          emit PLabel.new("", comment: "GEP fallback: #{inst.raw}")
+          # Constant-index GEP on local array: alias to the specific array element
+          base_name = base_op.value
+          element_label = @mem.func_array_element(@current_func, base_name, element_idx)
+          if element_label
+            key = "#{@current_func}::#{inst.result}"
+            @mem.set_alias(key, element_label)
+          else
+            fvar(inst.result)
+            emit PLabel.new("", comment: "GEP fallback: #{inst.raw}")
+          end
         end
       elsif base_op
         # Variable-index GEP: compute address + index at runtime
-        base_name = base_op.value
-        base_label = fvar(base_name)
-
-        # Determine if base is a pointer (holds an address) or an array (needs &base)
-        if is_pointer?(base_name)
-          # Pointer arithmetic: base already holds an address
-          addr_source = base_label
-        else
-          # Array base: need address-of the base label
+        if is_global_base
+          # Global array base: use address-of the base label
+          @global_arrays ||= {}
+          ga = @global_arrays[base_op.value]
+          base_label = ga ? ga[:base] : resolve_global(base_op.value)
           addr_source = @mem.temp
           @mem.mark_addr_of(addr_source, base_label)
+        else
+          base_name = base_op.value
+          base_label = fvar(base_name)
+          if is_pointer?(base_name)
+            addr_source = base_label
+          else
+            addr_source = @mem.temp
+            @mem.mark_addr_of(addr_source, base_label)
+          end
         end
 
         # Find the variable index operand (last non-base var operand)
@@ -1071,9 +1099,7 @@ module S4C
         if var_indices.any?
           index_var = resolve_operand(var_indices.last)
           r = fvar(inst.result)
-          # result = address + index
-          emit PAdd.new(index_var, addr_source, r, comment: "GEP #{inst.result} = #{base_name} + #{op_str(var_indices.last)}")
-          # Mark as pointer
+          emit PAdd.new(index_var, addr_source, r, comment: "GEP #{inst.result} = #{base_op.value} + #{op_str(var_indices.last)}")
           mark_pointer(inst.result)
         else
           fvar(inst.result)
