@@ -88,6 +88,9 @@ module S4C
     def lower_function(func)
       @current_func = func.name
 
+      # The entry block's implicit LLVM number is the parameter count
+      entry_block_num = func.params.length.to_s
+
       # Pre-scan: collect phi nodes and build mapping
       # @phi_copies["target_block"]["source_block"] = [[phi_result, value], ...]
       @phi_copies = {}
@@ -100,6 +103,8 @@ module S4C
           inst.operands.each_slice(2) do |val_op, bb_op|
             next unless bb_op&.label?
             src_block = bb_op.value
+            # Map entry block number to our "entry" name
+            src_block = 'entry' if src_block == entry_block_num && func.blocks.first&.name == 'entry'
             @phi_copies[block.name] ||= {}
             @phi_copies[block.name][src_block] ||= []
             @phi_copies[block.name][src_block] << [inst.result, val_op]
@@ -144,6 +149,7 @@ module S4C
       when 'store'         then lower_store(inst)
       when 'getelementptr' then lower_gep(inst)
       when 'call'          then lower_call(inst)
+      when 'switch' then lower_switch(inst)
       when 'select' then lower_select(inst)
       when 'phi'    then lower_phi(inst)
       when 'sext', 'zext', 'trunc', 'bitcast'
@@ -1062,6 +1068,43 @@ module S4C
       emit PLabel.new(true_label)
       emit PCp.new(r, true_val, comment: "select true value")
       emit PLabel.new(done_label)
+    end
+
+    # switch i32 %val, label %default [ i32 N, label %LN ... ]
+    # operands: [val, default_label, case_val1, case_label1, ...]
+    def lower_switch(inst)
+      val = resolve_operand(inst.operands[0])
+      default_target = inst.operands[1].value
+      cases = inst.operands[2..].each_slice(2).to_a
+
+      # For each case: if val == case_val, goto case_label
+      cases.each do |case_val_op, case_label_op|
+        case_val = resolve_operand(case_val_op)
+        target = case_label_op.value
+
+        # Inline eq check: diff = val - case_val; if diff == 0 goto target
+        @cmp_id += 1
+        id = @cmp_id
+        diff = @mem.temp
+        neg_diff = @mem.temp
+        not_eq_label = @mem.alloc_label("#{@current_func}_sw_ne#{id}")
+
+        emit PSub.new(val, case_val, diff, comment: "switch: #{op_str(inst.operands[0])} == #{case_val_op.value}?")
+        # if diff < 0, not equal
+        emit PNeg.new(diff, not_eq_label, comment: "switch: diff < 0 → skip")
+        # if -diff < 0 (diff > 0), not equal
+        t = @mem.temp
+        emit PSub.new(diff, @mem.zero, neg_diff, comment: "switch: negate diff")
+        emit PNeg.new(neg_diff, not_eq_label, comment: "switch: -diff < 0 → skip")
+        # diff == 0 → match!
+        emit_phi_copies(target)
+        emit PGoto.new(bb_label(target), comment: "switch: goto #{target}")
+        emit PLabel.new(not_eq_label)
+      end
+
+      # Default case
+      emit_phi_copies(default_target)
+      emit PGoto.new(bb_label(default_target), comment: "switch: default → #{default_target}")
     end
 
     def lower_phi(_inst)

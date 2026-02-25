@@ -53,7 +53,18 @@ module S4C
 
             # Instruction
             if line =~ /^\s+(.+)$/
-              inst = parse_instruction($1.strip)
+              inst_text = $1.strip
+              # Handle multi-line instructions (e.g., switch with [ ... ])
+              if inst_text.include?('[') && !inst_text.include?(']')
+                i += 1
+                while i < lines.length
+                  cont = lines[i].strip
+                  inst_text += " #{cont}"
+                  break if cont.include?(']')
+                  i += 1
+                end
+              end
+              inst = parse_instruction(inst_text)
               current_block << inst if inst && current_block
             end
 
@@ -137,6 +148,8 @@ module S4C
         parse_call_operands(rest)
       when 'phi'
         parse_phi_operands(rest)
+      when 'switch'
+        parse_switch_operands(rest)
       when 'select'
         parse_select_operands(rest)
       when 'sext', 'zext', 'trunc', 'bitcast', 'ptrtoint', 'inttoptr'
@@ -149,8 +162,8 @@ module S4C
 
     # "i32 %a, %b" or "i32 %a, 5" or "nsw i32 %a, %b"
     def parse_arith_operands(rest)
-      # Strip optional flags like nsw, nuw
-      rest = rest.sub(/^(nsw|nuw|nsw nuw|nuw nsw)\s+/, '')
+      # Strip optional flags like nsw, nuw, exact
+      rest = rest.sub(/^(?:(?:nsw|nuw|exact)\s+)+/, '')
       if rest =~ /^(\w+)\s+(.+),\s*(.+)/
         type = $1
         [parse_value($2.strip, type), parse_value($3.strip, type)]
@@ -265,6 +278,24 @@ module S4C
         pairs.flat_map do |val, bb|
           [parse_value(val.strip, type), Operand.new(:label, bb)]
         end
+      else
+        [Operand.new(:raw, rest)]
+      end
+    end
+
+    # "i32 %val, label %default [ i32 1, label %L1 i32 2, label %L2 ... ]"
+    def parse_switch_operands(rest)
+      # Parse: i32 %val, label %default [ i32 N, label %LN ... ]
+      if rest =~ /^(\w+)\s+(.+?),\s*label\s+%(\S+)\s*\[(.+)\]/m
+        type = $1
+        val = parse_value($2.strip, type)
+        default_label = Operand.new(:label, $3.strip)
+        cases_str = $4
+        # Parse case pairs: i32 N, label %LN
+        cases = cases_str.scan(/(\w+)\s+(-?\d+),\s*label\s+%([\w.]+)/).map do |_t, v, l|
+          [Operand.new(:const, v.to_i), Operand.new(:label, l)]
+        end
+        [val, default_label] + cases.flatten
       else
         [Operand.new(:raw, rest)]
       end

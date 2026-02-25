@@ -353,4 +353,20 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 15, sim.read_label('main___retval')
   end
+
+  def test_switch
+    # classify(1)+classify(3)+classify(5)+classify(99) = 10+30+50+(-1) = 89
+    sim, result, _ = compile_and_run(fixture('switch_test.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 89, sim.read_label('main___retval')
+  end
+
+  def test_collatz_o1
+    # collatz_steps(27) = 111, compiled with -O1 (phi nodes, select, no alloca)
+    sim, result, _ = compile_and_run(fixture('collatz_o1.ll'), max_cycles: 100_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 111, sim.read_label('main___retval')
+  end
 end
