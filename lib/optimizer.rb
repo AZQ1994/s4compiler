@@ -1,0 +1,362 @@
+# frozen_string_literal: true
+
+require_relative 'pseudo_ops'
+require 'set'
+
+module S4C
+  # Optimizes pseudo-op sequences between Lowering and Expander.
+  # Runs iterative passes: GotoNext, Unreachable, ConstFold, CopyProp, DeadStore.
+  class Optimizer
+    attr_reader :stats
+
+    def initialize(pseudo_ops, memory)
+      @ops = pseudo_ops.dup
+      @mem = memory
+      @stats = { iterations: 0, removed: 0 }
+    end
+
+    def optimize
+      original_count = @ops.length
+
+      # Pre-compute: does the program use indirect memory access?
+      # If so, array elements must be protected from DSE across all iterations.
+      @has_indirect = @ops.any? { |op| op.is_a?(PIndirectLoad) || op.is_a?(PIndirectStore) }
+
+      10.times do |i|
+        @stats[:iterations] = i + 1
+        changed = false
+        changed |= goto_next_elimination
+        changed |= unreachable_code_elimination
+        changed |= constant_folding
+        changed |= copy_propagation
+        changed |= dead_store_elimination
+        break unless changed
+      end
+      @stats[:removed] = original_count - @ops.length
+      @ops
+    end
+
+    private
+
+    # ── Analysis helpers ──────────────────────────────────────────────
+
+    # Return variable names read by an op
+    def reads(op)
+      case op
+      when PSub  then [op.a, op.b]
+      when PAdd  then [op.a, op.b]
+      when PCp   then [op.src]
+      when PNeg  then [op.val]
+      when PPush then [op.val]
+      when PPop  then []
+      when PIndirectLoad  then [op.addr_var]
+      when PIndirectStore then [op.addr_var, op.val]
+      when PGoto, PLabel, PData, PHalt, PCallSetReturn, PReturnJump
+        []
+      else
+        []
+      end
+    end
+
+    # Return variable names written by an op
+    def writes(op)
+      case op
+      when PSub  then [op.c]
+      when PAdd  then [op.c]
+      when PCp   then [op.dst]
+      when PPop  then [op.dst]
+      when PIndirectLoad then [op.dst]
+      when PNeg, PGoto, PLabel, PData, PHalt, PPush,
+           PIndirectStore, PCallSetReturn, PReturnJump
+        []
+      else
+        []
+      end
+    end
+
+    # Variables that must never be eliminated by DSE
+    def protected_var?(v)
+      return true if v.include?('___retval')
+      return true if v.include?('_arg_')
+      return true if v == '__stack_SP'
+      return true if v.start_with?('__mul_', '__sdiv_', '__srem_',
+                                    '__shl_', '__shr_',
+                                    '__and_', '__or_', '__xor_')
+      return true if @mem.addr_of_refs.key?(v)
+      false
+    end
+
+    # Is this op a barrier for copy propagation? (side effects on unknown memory)
+    def barrier?(op)
+      op.is_a?(PPush) || op.is_a?(PPop) ||
+        op.is_a?(PIndirectLoad) || op.is_a?(PIndirectStore) ||
+        op.is_a?(PCallSetReturn) || op.is_a?(PReturnJump)
+    end
+
+    # Is this op an unconditional control transfer?
+    def unconditional_transfer?(op)
+      op.is_a?(PGoto) || op.is_a?(PHalt) || op.is_a?(PReturnJump)
+    end
+
+    # Build inverse constant map: label_name → integer value (only true constants)
+    def build_constant_map
+      map = {}
+      @mem.constants.each { |val, label| map[label] = val }
+      map
+    end
+
+    # ── Pass 1: GotoNextElimination ───────────────────────────────────
+
+    def goto_next_elimination
+      changed = false
+      result = []
+      @ops.each_with_index do |op, i|
+        if op.is_a?(PGoto)
+          nxt = @ops[i + 1]
+          if nxt.is_a?(PLabel) && nxt.name == op.label
+            changed = true
+            next # skip this PGoto
+          end
+        end
+        result << op
+      end
+      @ops = result
+      changed
+    end
+
+    # ── Pass 2: UnreachableCodeElimination ────────────────────────────
+
+    def unreachable_code_elimination
+      changed = false
+      result = []
+      unreachable = false
+
+      @ops.each do |op|
+        if unreachable
+          if op.is_a?(PLabel)
+            unreachable = false
+            result << op
+          else
+            changed = true # dropping unreachable op
+          end
+        else
+          result << op
+          unreachable = true if unconditional_transfer?(op)
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
+    # ── Pass 3: ConstantFolding ───────────────────────────────────────
+    # Only folds operations where BOTH operands are true constants
+    # (from memory.constants). Does NOT propagate constants through copies
+    # to avoid unsoundness across control flow boundaries.
+
+    def constant_folding
+      changed = false
+      const_map = build_constant_map
+
+      result = @ops.map do |op|
+        case op
+        when PAdd
+          va = const_map[op.a]
+          vb = const_map[op.b]
+          if va && vb
+            sum = va + vb
+            label = @mem.const(sum)
+            const_map[label] = sum
+            changed = true
+            PCp.new(op.c, label, comment: "#{op.comment} [folded #{va}+#{vb}=#{sum}]")
+          else
+            op
+          end
+
+        when PSub
+          va = const_map[op.a]
+          vb = const_map[op.b]
+          if va && vb
+            diff = vb - va  # PSub: c = b - a
+            label = @mem.const(diff)
+            const_map[label] = diff
+            changed = true
+            PCp.new(op.c, label, comment: "#{op.comment} [folded #{vb}-#{va}=#{diff}]")
+          else
+            op
+          end
+
+        when PNeg
+          vv = const_map[op.val]
+          if vv
+            if vv < 0
+              changed = true
+              PGoto.new(op.label, comment: "#{op.comment} [folded: #{vv}<0 always]")
+            else
+              # Never taken → delete
+              changed = true
+              nil
+            end
+          else
+            op
+          end
+
+        else
+          op
+        end
+      end
+
+      @ops = result.compact
+      changed
+    end
+
+    # ── Pass 4: CopyPropagation ───────────────────────────────────────
+    # Single-pass forward substitution within straight-line blocks.
+    # Resets substitution map at PLabel and barrier boundaries.
+
+    def copy_propagation
+      changed = false
+      subst = {}
+      result = []
+
+      @ops.each do |op|
+        # Reset substitution map at block boundaries
+        if op.is_a?(PLabel)
+          subst = {}
+          result << op
+          next
+        end
+
+        if barrier?(op)
+          # Apply substitutions to this barrier op's reads, then reset
+          modified = substitute_reads(op, subst)
+          changed = true if modified != op
+          result << modified
+          subst = {}
+          next
+        end
+
+        # Apply current substitutions to reads
+        modified = substitute_reads(op, subst)
+        changed = true if modified != op
+        result << modified
+
+        # Update substitution map based on writes
+        writes(modified).each do |w|
+          # Invalidate substitutions whose source is being overwritten
+          subst.delete_if { |_t, src| src == w }
+          # Remove the old substitution for this destination
+          subst.delete(w)
+        end
+
+        # If this is a PCp, register new substitution
+        if modified.is_a?(PCp)
+          subst[modified.dst] = modified.src
+        end
+
+        # Reset substitutions after unconditional transfers and conditional branches
+        if unconditional_transfer?(op) || op.is_a?(PNeg)
+          subst = {}
+        end
+      end
+
+      # Remove self-copies PCp(x, x)
+      before = result.length
+      result.reject! { |op| op.is_a?(PCp) && op.dst == op.src }
+      changed = true if result.length != before
+
+      @ops = result
+      changed
+    end
+
+    # Replace reads in an op using the substitution map
+    def substitute_reads(op, subst)
+      return op if subst.empty?
+
+      case op
+      when PSub
+        a2 = subst[op.a] || op.a
+        b2 = subst[op.b] || op.b
+        (a2 != op.a || b2 != op.b) ? PSub.new(a2, b2, op.c, comment: op.comment) : op
+
+      when PAdd
+        a2 = subst[op.a] || op.a
+        b2 = subst[op.b] || op.b
+        (a2 != op.a || b2 != op.b) ? PAdd.new(a2, b2, op.c, comment: op.comment) : op
+
+      when PCp
+        s2 = subst[op.src] || op.src
+        s2 != op.src ? PCp.new(op.dst, s2, comment: op.comment) : op
+
+      when PNeg
+        v2 = subst[op.val] || op.val
+        v2 != op.val ? PNeg.new(v2, op.label, comment: op.comment) : op
+
+      when PPush
+        v2 = subst[op.val] || op.val
+        v2 != op.val ? PPush.new(v2, op.push_id, comment: op.comment) : op
+
+      when PIndirectLoad
+        a2 = subst[op.addr_var] || op.addr_var
+        a2 != op.addr_var ? PIndirectLoad.new(op.dst, a2, op.id, comment: op.comment) : op
+
+      when PIndirectStore
+        a2 = subst[op.addr_var] || op.addr_var
+        v2 = subst[op.val] || op.val
+        (a2 != op.addr_var || v2 != op.val) ? PIndirectStore.new(a2, v2, op.id, comment: op.comment) : op
+
+      else
+        op
+      end
+    end
+
+    # ── Pass 5: DeadStoreElimination ──────────────────────────────────
+
+    def dead_store_elimination
+      # Build global set of all variables that are ever read
+      used = Set.new
+      @ops.each do |op|
+        reads(op).each { |v| used << v }
+      end
+
+      # Also mark special references as used
+      @ops.each do |op|
+        case op
+        when PGoto then used << op.label
+        when PNeg  then used << op.label
+        when PCallSetReturn
+          used << op.ret_d_label
+          used << op.return_label
+        when PReturnJump then used << op.d_label
+        end
+      end
+
+      # If program uses indirect memory access, protect all variables that
+      # could be targets of computed pointers (array elements, addr_of targets)
+      if @has_indirect
+        # Protect all targets of address-of references
+        @mem.addr_of_refs.each_value { |target| used << target }
+        # Protect all array element variables (pattern: *_arr_*_N)
+        @mem.data_entries.each do |label, _|
+          used << label if label.include?('_arr_')
+        end
+      end
+
+      changed = false
+      result = @ops.select do |op|
+        w = writes(op)
+        if w.empty?
+          true # no writes → keep
+        elsif w.all? { |v| !used.include?(v) && !protected_var?(v) }
+          changed = true
+          false
+        else
+          true
+        end
+      end
+
+      @ops = result
+      changed
+    end
+  end
+end

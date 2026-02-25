@@ -6,6 +6,7 @@ require 'parser'
 require 'lowering'
 require 'expander'
 require 'emitter'
+require 'optimizer'
 
 # Minimal SUBNEG4 simulator for testing s4c output
 class Subneg4Sim
@@ -170,8 +171,10 @@ class TestE2E < Minitest::Test
     ir_module = parser.parse(source)
     lowering = S4C::Lowering.new
     lowering.lower(ir_module)
+    optimizer = S4C::Optimizer.new(lowering.pseudo_ops, lowering.mem)
+    optimized = optimizer.optimize
     expander = S4C::Expander.new(lowering.mem)
-    expander.expand(lowering.pseudo_ops)
+    expander.expand(optimized)
     emitter = S4C::Emitter.new(lowering.mem, expander.instructions, show_result: true)
     asm = emitter.emit
 
