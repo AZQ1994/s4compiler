@@ -1,4 +1,6 @@
 *.s4
+*.ll
 *.o
 .DS_Store
 Gemfile.lock
+bench_*.rb
