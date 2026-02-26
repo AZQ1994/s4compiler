@@ -687,6 +687,26 @@ class TestOptimizer < Minitest::Test
   end
 
   def test_push_pop_protected_var_kept
+    # Protected var that IS read after pop must be kept.
+    # Use retval as both pop target and subsequent read destination
+    # so DSE won't remove the read.
+    rv = @mem.func_var("f", "__retval")
+    ret_d = @mem.func_var("f", "ret_d")
+    ops = [
+      S4C::PPush.new(rv, "1_s0"),
+      S4C::PPop.new(rv, "1_r0"),
+      S4C::PNeg.new(rv, "done"),  # rv is read here (can't be DSE'd)
+      S4C::PLabel.new("done"),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+    assert result.any? { |op| op.is_a?(S4C::PPush) }
+    assert result.any? { |op| op.is_a?(S4C::PPop) }
+  end
+
+  def test_push_pop_protected_var_removed_before_halt
+    # Protected var not read between pop and halt → safe to remove
     rv = @mem.func_var("f", "__retval")
     ops = [
       S4C::PPush.new(rv, "1_s0"),
@@ -695,8 +715,8 @@ class TestOptimizer < Minitest::Test
     ]
     opt = S4C::Optimizer.new(ops, @mem)
     result = opt.optimize
-    assert result.any? { |op| op.is_a?(S4C::PPush) }
-    assert result.any? { |op| op.is_a?(S4C::PPop) }
+    refute result.any? { |op| op.is_a?(S4C::PPush) }
+    refute result.any? { |op| op.is_a?(S4C::PPop) }
   end
 
   # ── Combined: new passes interact with existing ────────────────

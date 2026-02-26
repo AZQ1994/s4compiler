@@ -48,6 +48,7 @@ module S4C
         changed |= write_destination_forwarding
         changed |= copy_propagation
         changed |= phi_coalescing
+        changed |= arg_local_aliasing
         changed |= dead_store_elimination
         changed |= liveness_push_pop_elimination
         changed |= push_pop_elimination
@@ -1296,6 +1297,43 @@ module S4C
       changed
     end
 
+    # ── Pass: ArgLocalAliasing ────────────────────────────────────────
+    # Detect prologue copies PCp(local_X, arg_Y) right after func_ labels
+    # where local_X is written only once. Replace local_X with arg_Y
+    # everywhere and remove resulting self-copies.
+    def arg_local_aliasing
+      changed = false
+      i = 0
+      while i < @ops.length
+        if @ops[i].is_a?(PLabel) && @ops[i].name.start_with?("func_")
+          # Scan prologue copies immediately after function entry
+          j = i + 1
+          restart = false
+          while j < @ops.length && @ops[j].is_a?(PCp)
+            cp = @ops[j]
+            # PCp(local_X, arg_Y) where arg_Y contains "_arg_"
+            if cp.src.include?("_arg_") && !cp.dst.include?("_arg_")
+              local_var = cp.dst
+              arg_var = cp.src
+              # Check: local_var written only once (this prologue copy)
+              write_count = @ops.count { |op| writes(op).include?(local_var) }
+              if write_count == 1
+                @ops = @ops.map { |op| replace_var_in_op(op, local_var, arg_var) }
+                @ops.reject! { |op| op.is_a?(PCp) && op.dst == op.src }
+                changed = true
+                restart = true
+                break  # restart scan (ops changed)
+              end
+            end
+            j += 1
+          end
+          next if restart  # re-scan from current i (ops changed, indices shifted)
+        end
+        i += 1
+      end
+      changed
+    end
+
     # Replace occurrences of old_var with new_var in an op's read/write positions
     def replace_var_in_op(op, old_var, new_var)
       case op
@@ -1364,6 +1402,48 @@ module S4C
       false
     end
 
+    # Helper: check if var is not read between pop and the next tail call,
+    # return jump, or halt. If we hit one of those without reading var,
+    # the pop is unnecessary because execution leaves the function.
+    # Distinguishes tail calls (PGoto func_* without preceding PCallSetReturn)
+    # from regular calls (PGoto func_* with preceding PCallSetReturn).
+    def not_read_before_tail_call?(pop_idx, var)
+      pending_call = false
+      j = pop_idx + 1
+      while j < @ops.length
+        op_j = @ops[j]
+        return true if op_j.is_a?(PHalt)
+        if op_j.is_a?(PReturnJump)
+          # PReturnJump uses its d_label as jump destination;
+          # if var matches, the variable is needed.
+          return op_j.d_label != var
+        end
+        if op_j.is_a?(PCallSetReturn)
+          pending_call = true
+          j += 1
+          next
+        end
+        if op_j.is_a?(PGoto)
+          if op_j.label.start_with?("func_")
+            if pending_call
+              pending_call = false  # regular call, continue scanning
+            else
+              return true  # tail call → function exits
+            end
+          else
+            # Local goto (loop back, branch) — can't follow control flow,
+            # conservatively assume variable may be needed.
+            return false
+          end
+          j += 1
+          next
+        end
+        return false if reads(op_j).include?(var)
+        j += 1
+      end
+      false
+    end
+
     # ── Pass: LivenessPushPopElimination ──────────────────────────────
     # More precise push/pop elimination using local liveness analysis.
 
@@ -1390,9 +1470,29 @@ module S4C
           pop_idx = pop_info[:idx]
           var = pop_info[:var]
 
-          # Protected vars can still be eliminated if they are written before
-          # being read after the pop (the restored value is immediately overwritten).
-          next if protected_var?(var) && !written_before_read_after_pop?(pop_idx, var)
+          # Protected vars: ret_d is always kept (needed for return mechanism).
+          # Other protected vars can be eliminated if:
+          #   (a) written before read after pop, OR
+          #   (b) not read in straight-line code before a tail call (the tail call
+          #       re-enters the function, making the saved value irrelevant).
+          if protected_var?(var)
+            if written_before_read_after_pop?(pop_idx, var)
+              # Proceed to normal checks below
+            elsif !var.end_with?('_ret_d') && not_read_before_tail_call?(pop_idx, var)
+              # Tail call path: var is not read, directly eliminate.
+              # (used_after scan would find reads past the tail call in other
+              # functions, but those are from a different execution context.)
+              matching_push = site[:pushes].find { |p| p[:var] == var }
+              if matching_push
+                to_remove << matching_push[:idx]
+                to_remove << pop_idx
+                changed = true
+              end
+              next
+            else
+              next  # Protected, keep push/pop
+            end
+          end
 
           # Find matching push
           matching_push = site[:pushes].find { |p| p[:var] == var }
@@ -1400,12 +1500,33 @@ module S4C
           push_idx = matching_push[:idx]
 
           # Check 1: Is var read by any non-PPush instruction after the pop?
-          # Scan all instructions from pop to end of program (ignore control flow
-          # boundaries). Exclude PPush reads to break circular dependency — same
-          # technique used by push_pop_elimination.
+          # Scan forward from pop, stopping at function exit boundaries:
+          # - PHalt (program ends)
+          # - PReturnJump (function returns; check if d_label == var)
+          # - PGoto func_* without preceding PCallSetReturn (tail call)
+          # Regular calls (PCallSetReturn + PGoto func_*) don't break.
+          # Local PGoto and PLabel are traversed (conservative within function).
           used_after = false
+          pending_call_ua = false
           ((pop_idx + 1)...@ops.length).each do |j|
             op_j = @ops[j]
+            break if op_j.is_a?(PHalt)
+            if op_j.is_a?(PReturnJump)
+              used_after = true if op_j.d_label == var
+              break
+            end
+            if op_j.is_a?(PCallSetReturn)
+              pending_call_ua = true
+              next
+            end
+            if op_j.is_a?(PGoto) && op_j.label.start_with?("func_")
+              if pending_call_ua
+                pending_call_ua = false  # regular call, don't break
+              else
+                break  # tail call → function exits
+              end
+              next
+            end
             next if op_j.is_a?(PPush)  # exclude PPush reads (break circular dep)
             if reads(op_j).include?(var)
               used_after = true
