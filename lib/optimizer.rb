@@ -44,6 +44,7 @@ module S4C
         changed |= gep_address_reuse
         changed |= loop_invariant_code_motion
         changed |= loop_rotation
+        changed |= loop_add_to_sub
         changed |= tail_call_elimination
         changed |= write_destination_forwarding
         changed |= copy_propagation
@@ -617,6 +618,8 @@ module S4C
           # Skip function calls: PGoto preceded by PCallSetReturn is a call, not a loop
           prev = i > 0 ? @ops[i - 1] : nil
           next if prev.is_a?(PCallSetReturn)
+          # Skip jumps to function entries (tail calls, not loops)
+          next if op.label.start_with?("func_")
           back_edges << { header: label_positions[op.label], tail: i, label: op.label }
         end
       end
@@ -717,6 +720,98 @@ module S4C
       end
 
       changed
+    end
+
+    # ── Pass: LoopAddToSub ─────────────────────────────────────────
+    # For PAdd(variant, invariant, result) inside loops where one operand
+    # is never written (e.g., address-of constants like &data), precompute
+    # the negation of the invariant operand at function entry and replace
+    # PAdd with PSub.  Saves 1 SUBNEG4 per PAdd execution (PAdd=2 → PSub=1).
+
+    def loop_add_to_sub
+      # Collect all variables written by any instruction
+      written_vars = Set.new
+      @ops.each { |op| writes(op).each { |v| written_vars << v } }
+
+      # Detect tight inner loops: conditional back-edges only
+      # (PSubNeg/PNeg/PIndirectLoadSubNeg branching backward)
+      # These are the hot scan loops; PGoto back-edges are outer loops
+      # where gep_address_reuse handles address sharing better.
+      label_positions = {}
+      @ops.each_with_index { |op, i| label_positions[op.name] = i if op.is_a?(PLabel) }
+
+      in_inner_loop = Array.new(@ops.length, false)
+      inner_loop_headers = []  # earliest header positions for insertion
+      @ops.each_with_index do |op, i|
+        next unless op.is_a?(PSubNeg) || op.is_a?(PNeg) || op.is_a?(PIndirectLoadSubNeg)
+        target = label_positions[op.label]
+        next unless target.is_a?(Integer) && target < i
+        (target..i).each { |j| in_inner_loop[j] = true }
+        inner_loop_headers << target
+      end
+
+      return false if inner_loop_headers.empty?
+
+      const_map = build_constant_map
+
+      # Deduplicate invariant variables by addr_of_refs target
+      addr_of = @mem.addr_of_refs
+      canonical = {}  # invariant_var → canonical representative
+      addr_of.each do |label, target|
+        next if written_vars.include?(label)
+        next if const_map[label]
+        key = target
+        canonical[label] = key
+      end
+
+      neg_cache = {}  # canonical_key → neg_var
+      changed = false
+
+      @ops = @ops.map.with_index do |op, i|
+        next op unless in_inner_loop[i] && op.is_a?(PAdd)
+
+        a_const = !written_vars.include?(op.a) && !const_map[op.a]
+        b_const = !written_vars.include?(op.b) && !const_map[op.b]
+
+        invariant, variant = if a_const && !b_const
+                               [op.a, op.b]
+                             elsif b_const && !a_const
+                               [op.b, op.a]
+                             end
+        next op unless invariant
+
+        # Use canonical key for deduplication
+        key = canonical[invariant] || invariant
+        neg_cache[key] ||= { neg_var: @mem.temp, first_invariant: invariant }
+        neg_var = neg_cache[key][:neg_var]
+        changed = true
+        PSub.new(neg_var, variant, op.c, comment: "#{op.comment} [add→sub]")
+      end
+
+      return false unless changed
+
+      # Insert precomputations just before the earliest inner loop header.
+      # This is after any base-case early-return checks but before the
+      # outer loop entry, so base-case calls skip the precomputation.
+      earliest_header = inner_loop_headers.min
+      # Find the PGoto entry that jumps to the inner loop area (just before the header)
+      insert_pos = earliest_header
+      # Walk backward to find the PGoto entry for this loop region
+      (earliest_header - 1).downto(0) do |j|
+        if @ops[j].is_a?(PGoto) && label_positions[@ops[j].label] &&
+           label_positions[@ops[j].label] >= earliest_header
+          insert_pos = j
+          break
+        end
+      end
+
+      neg_cache.each_value do |info|
+        @ops.insert(insert_pos, PSub.new(info[:first_invariant], "ZERO", info[:neg_var],
+              comment: "precompute -#{info[:first_invariant]}"))
+        insert_pos += 1
+      end
+
+      true
     end
 
     # ── Pass: LoopRotation ─────────────────────────────────────────

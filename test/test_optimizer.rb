@@ -1229,4 +1229,110 @@ class TestOptimizer < Minitest::Test
     assert opt.stats[:iterations] >= 1
     assert opt.stats[:removed] >= 1
   end
+
+  # ── LoopAddToSub ──────────────────────────────────────────────────
+
+  def test_loop_add_to_sub_converts_padd_in_inner_loop
+    # PAdd with loop-invariant addr-of operand inside a conditional
+    # back-edge loop should be converted to PSub with precomputed negation.
+    base = @mem.temp       # address-of constant (never written)
+    @mem.mark_addr_of(base, "some_array")
+    iv = @mem.func_var("test", "i")
+    addr = @mem.func_var("test", "addr")
+    cmp = @mem.func_var("test", "cmp")
+    r = retval
+
+    ops = [
+      S4C::PLabel.new("func_test"),
+      S4C::PCp.new(iv, @mem.zero),            # i = 0
+      S4C::PGoto.new("test_header"),           # enter loop
+      S4C::PLabel.new("test_body"),            # loop body
+      S4C::PSub.new(@mem.const(-1), iv, iv),   # i++
+      S4C::PLabel.new("test_header"),          # loop header
+      S4C::PAdd.new(iv, base, addr),           # addr = i + base (target)
+      S4C::PIndirectLoadSubNeg.new(addr, cmp, "test_body", "il1", :b),
+      S4C::PCp.new(r, iv),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # PAdd should be replaced with PSub
+    padds_in_loop = result.select { |op| op.is_a?(S4C::PAdd) && op.a == iv }
+    assert_empty padds_in_loop, "PAdd in inner loop should be converted to PSub"
+
+    # Should have a PSub with [add→sub] comment
+    psubs = result.select { |op| op.is_a?(S4C::PSub) && op.comment&.include?("[add→sub]") }
+    assert_equal 1, psubs.length
+
+    # Should have a precomputation PSub
+    precomputes = result.select { |op| op.is_a?(S4C::PSub) && op.comment&.include?("precompute") }
+    assert_equal 1, precomputes.length
+  end
+
+  def test_loop_add_to_sub_skips_outer_loop_padd
+    # PAdd inside an outer loop (PGoto back-edge) should NOT be converted
+    # by loop_add_to_sub (no [add→sub] PSub or precomputation inserted).
+    base = @mem.temp
+    @mem.mark_addr_of(base, "arr")
+    iv = @mem.func_var("test", "j")
+    addr = @mem.func_var("test", "a")
+    r = retval
+
+    ops = [
+      S4C::PLabel.new("func_test"),
+      S4C::PLabel.new("outer_loop"),
+      S4C::PAdd.new(iv, base, addr),           # addr = j + base
+      S4C::PSub.new(@mem.const(-1), iv, iv),   # j++
+      S4C::PSub.new(@mem.const(1), iv, r),     # check
+      S4C::PGoto.new("outer_loop"),             # back-edge (PGoto, not conditional)
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # loop_add_to_sub should NOT have added [add→sub] PSub or precomputation
+    add_to_sub = result.select { |op| op.is_a?(S4C::PSub) && op.comment&.include?("[add→sub]") }
+    assert_empty add_to_sub, "loop_add_to_sub should not transform PAdd in outer loop"
+    precomputes = result.select { |op| op.is_a?(S4C::PSub) && op.comment&.include?("precompute") }
+    assert_empty precomputes, "No precomputation needed for outer loop only"
+  end
+
+  def test_loop_add_to_sub_deduplicates_by_addr_of
+    # Multiple PAdds with different base vars pointing to same addr_of target
+    # should share a single precomputed negation.
+    base1 = @mem.temp
+    base2 = @mem.temp
+    @mem.mark_addr_of(base1, "data")
+    @mem.mark_addr_of(base2, "data")  # same target
+    iv1 = @mem.func_var("test", "x")
+    iv2 = @mem.func_var("test", "y")
+    addr1 = @mem.func_var("test", "a1")
+    addr2 = @mem.func_var("test", "a2")
+    cmp = @mem.func_var("test", "cmp")
+    r = retval
+
+    ops = [
+      S4C::PLabel.new("func_test"),
+      S4C::PGoto.new("hdr1"),
+      S4C::PLabel.new("body1"),
+      S4C::PSub.new(@mem.const(-1), iv1, iv1),
+      S4C::PLabel.new("hdr1"),
+      S4C::PAdd.new(iv1, base1, addr1),
+      S4C::PIndirectLoadSubNeg.new(addr1, cmp, "body1", "il1", :b),
+      S4C::PGoto.new("hdr2"),
+      S4C::PLabel.new("body2"),
+      S4C::PSub.new(@mem.const(1), iv2, iv2),
+      S4C::PLabel.new("hdr2"),
+      S4C::PAdd.new(iv2, base2, addr2),
+      S4C::PIndirectLoadSubNeg.new(addr2, cmp, "body2", "il2", :a),
+      S4C::PCp.new(r, iv1),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    precomputes = result.select { |op| op.is_a?(S4C::PSub) && op.comment&.include?("precompute") }
+    assert_equal 1, precomputes.length, "Should deduplicate precomputations for same addr_of target"
+  end
 end
