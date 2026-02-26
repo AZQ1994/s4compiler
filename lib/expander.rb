@@ -40,6 +40,7 @@ module S4C
       when PReturnJump    then expand_return_jump(op)
       when PPush          then expand_push(op)
       when PPop           then expand_pop(op)
+      when PIndirectLoadSubNeg then expand_indirect_load_subneg(op)
       when PIndirectLoad  then expand_indirect_load(op)
       when PIndirectStore then expand_indirect_store(op)
       when PLabel
@@ -164,6 +165,22 @@ module S4C
       @instructions << Subneg4.new(z, op.addr_var, c_label, 'NEXT', "#{op.comment} (set write addr)")
       # Step 2: Write val to mem[addr_var] (C operand patched)
       @instructions << [:push_write, z, op.val, c_label, op.comment]
+    end
+
+    # PIndirectLoadSubNeg: fused indirect load + subtract + conditional branch
+    # Patches one operand with addr_var, then does subtract+branch in one instruction.
+    def expand_indirect_load_subneg(op)
+      z = @mem.zero
+      t = @mem.temp
+      if op.indirect_pos == :b
+        b_label = "ilcmp_b_#{op.id}"
+        @instructions << Subneg4.new(z, op.addr_var, b_label, 'NEXT', "#{op.comment} (patch B)")
+        @instructions << [:indirect_subneg_b, op.cmp_val, b_label, t, op.label, op.comment]
+      else # :a
+        a_label = "ilcmp_a_#{op.id}"
+        @instructions << Subneg4.new(z, op.addr_var, a_label, 'NEXT', "#{op.comment} (patch A)")
+        @instructions << [:indirect_subneg_a, a_label, op.cmp_val, t, op.label, op.comment]
+      end
     end
 
     # PCallSetReturn(ret_d_label, return_label):

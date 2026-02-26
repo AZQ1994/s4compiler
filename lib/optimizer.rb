@@ -21,7 +21,7 @@ module S4C
 
       # Pre-compute: does the program use indirect memory access?
       # If so, array elements must be protected from DSE across all iterations.
-      @has_indirect = @ops.any? { |op| op.is_a?(PIndirectLoad) || op.is_a?(PIndirectStore) }
+      @has_indirect = @ops.any? { |op| op.is_a?(PIndirectLoad) || op.is_a?(PIndirectStore) || op.is_a?(PIndirectLoadSubNeg) }
 
       # Pre-compute jump targets for copy propagation single-predecessor extension
       compute_jump_targets
@@ -36,9 +36,12 @@ module S4C
         changed |= dead_label_elimination
         changed |= constant_folding
         changed |= strength_reduction
+        changed |= add_to_sub_conversion
         changed |= peephole_double_negation
         changed |= cmp_branch_fusion
+        changed |= indirect_load_subneg_fusion
         changed |= local_value_numbering
+        changed |= gep_address_reuse
         changed |= loop_invariant_code_motion
         changed |= loop_rotation
         changed |= tail_call_elimination
@@ -70,6 +73,7 @@ module S4C
       when PPush    then [op.val]
       when PPop     then []
       when PIndirectLoad  then [op.addr_var]
+      when PIndirectLoadSubNeg then [op.addr_var, op.cmp_val]
       when PIndirectStore then [op.addr_var, op.val]
       when PGoto, PLabel, PData, PHalt, PCallSetReturn, PReturnJump
         []
@@ -87,7 +91,7 @@ module S4C
       when PPop  then [op.dst]
       when PIndirectLoad then [op.dst]
       when PSubNeg, PNeg, PGoto, PLabel, PData, PHalt, PPush,
-           PIndirectStore, PCallSetReturn, PReturnJump
+           PIndirectStore, PIndirectLoadSubNeg, PCallSetReturn, PReturnJump
         []
       else
         []
@@ -110,7 +114,7 @@ module S4C
     # Is this op a barrier for copy propagation? (side effects on unknown memory)
     def barrier?(op)
       op.is_a?(PPush) || op.is_a?(PPop) ||
-        op.is_a?(PIndirectLoad) || op.is_a?(PIndirectStore) ||
+        op.is_a?(PIndirectLoad) || op.is_a?(PIndirectLoadSubNeg) || op.is_a?(PIndirectStore) ||
         op.is_a?(PCallSetReturn) || op.is_a?(PReturnJump)
     end
 
@@ -127,6 +131,7 @@ module S4C
         when PGoto   then @jump_targets << op.label
         when PNeg    then @jump_targets << op.label
         when PSubNeg then @jump_targets << op.label
+        when PIndirectLoadSubNeg then @jump_targets << op.label
         when PCallSetReturn then @jump_targets << op.return_label
         end
       end
@@ -290,6 +295,7 @@ module S4C
         when PGoto   then referenced << op.label
         when PNeg    then referenced << op.label
         when PSubNeg then referenced << op.label
+        when PIndirectLoadSubNeg then referenced << op.label
         when PCallSetReturn then referenced << op.return_label
         end
       end
@@ -415,6 +421,40 @@ module S4C
       changed
     end
 
+    # ── Pass: AddToSubConversion ──────────────────────────────────────
+    # PAdd(const, b, c) → PSub(neg_const, b, c): 2 SUBNEG4 → 1 SUBNEG4.
+    # When 'a' is a known constant, we can negate it at compile time and use PSub.
+
+    def add_to_sub_conversion
+      changed = false
+      const_map = build_constant_map
+
+      result = @ops.map do |op|
+        if op.is_a?(PAdd)
+          va = const_map[op.a]
+          vb = const_map[op.b]
+          if va
+            # PAdd(const, b, c) → c = b + const → PSub(-const, b, c) = b - (-const)
+            neg_label = @mem.const(-va)
+            changed = true
+            PSub.new(neg_label, op.b, op.c, comment: "#{op.comment} [add→sub: +#{va}]")
+          elsif vb
+            # PAdd(a, const, c) → c = const + a → PSub(-const, a, c) = a - (-const)
+            neg_label = @mem.const(-vb)
+            changed = true
+            PSub.new(neg_label, op.a, op.c, comment: "#{op.comment} [add→sub: +#{vb}]")
+          else
+            op
+          end
+        else
+          op
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
     # ── Pass 8: PeepholeDoubleNegation ──────────────────────────────────
     # PSub(x, ZERO, t); PSub(t, ZERO, r) → t=-x; r=-(-x)=x → PCp(r, x)
 
@@ -507,6 +547,57 @@ module S4C
       else
         nil
       end
+    end
+
+    # ── Pass: GepAddressReuse ───────────────────────────────────────
+    # Within a basic block, if PAdd(x, y, addr1) is followed by PAdd(x, y, addr2)
+    # with the same operands (and no intervening writes to x, y, or addr1),
+    # replace the second PAdd with PCp(addr2, addr1).
+    # Saves 1 SUBNEG4 per reuse (PAdd=2 → PCp=1).
+
+    def gep_address_reuse
+      changed = false
+      addr_cache = {} # [sorted(canonical_a, canonical_b)] → result_label
+
+      # Build canonical name map: labels with same addr-of target are equivalent
+      canon = {}
+      @mem.addr_of_refs.each do |label, target|
+        canon[label] = target
+      end
+
+      normalize = ->(v) { canon[v] || v }
+
+      result = @ops.map do |op|
+        # Reset cache at unconditional control flow and merge points.
+        # Conditional branches (PSubNeg, PNeg) don't clear: fall-through
+        # path retains valid cache; taken path lands on PLabel which clears.
+        if op.is_a?(PLabel) || op.is_a?(PGoto) ||
+           op.is_a?(PReturnJump) || op.is_a?(PHalt)
+          addr_cache.clear
+          op
+        elsif op.is_a?(PAdd)
+          key = [normalize[op.a], normalize[op.b]].sort
+          if addr_cache.key?(key) && addr_cache[key] != op.c
+            changed = true
+            PCp.new(op.c, addr_cache[key], comment: "#{op.comment} [addr reuse]")
+          else
+            addr_cache[key] = op.c
+            op
+          end
+        else
+          # Invalidate cache entries whose result or operands are overwritten
+          written = writes(op)
+          unless written.empty?
+            addr_cache.reject! do |k, v|
+              written.any? { |w| k.include?(normalize[w]) || k.include?(w) || v == w }
+            end
+          end
+          op
+        end
+      end
+
+      @ops = result
+      changed
     end
 
     # ── Pass 10: LoopInvariantCodeMotion ─────────────────────────────
@@ -1004,6 +1095,12 @@ module S4C
         v2 = subst[op.val] || op.val
         v2 != op.val ? PPush.new(v2, op.push_id, comment: op.comment) : op
 
+      when PIndirectLoadSubNeg
+        a2 = subst[op.addr_var] || op.addr_var
+        c2 = subst[op.cmp_val] || op.cmp_val
+        (a2 != op.addr_var || c2 != op.cmp_val) ?
+          PIndirectLoadSubNeg.new(a2, c2, op.label, op.id, op.indirect_pos, comment: op.comment) : op
+
       when PIndirectLoad
         a2 = subst[op.addr_var] || op.addr_var
         a2 != op.addr_var ? PIndirectLoad.new(op.dst, a2, op.id, comment: op.comment) : op
@@ -1033,6 +1130,7 @@ module S4C
         when PGoto   then used << op.label
         when PNeg    then used << op.label
         when PSubNeg then used << op.label
+        when PIndirectLoadSubNeg then used << op.label
         when PCallSetReturn
           used << op.ret_d_label
           used << op.return_label
@@ -1091,6 +1189,47 @@ module S4C
           result << PSubNeg.new(op.a, op.b, nxt.label, comment: "#{op.comment} [fused cmp+br]")
           changed = true
           i += 2
+        else
+          result << op
+          i += 1
+        end
+      end
+
+      @ops = result
+      changed
+    end
+
+    # ── Pass: IndirectLoadSubNegFusion ─────────────────────────────────
+    # Fuse PIndirectLoad + PSubNeg into PIndirectLoadSubNeg when the loaded
+    # value is only used by the PSubNeg. Saves 1 SUBNEG4 per occurrence.
+
+    def indirect_load_subneg_fusion
+      changed = false
+
+      # Count uses of each variable (read occurrences)
+      use_count = Hash.new(0)
+      @ops.each { |op| reads(op).each { |v| use_count[v] += 1 } }
+
+      result = []
+      i = 0
+      while i < @ops.length
+        op = @ops[i]
+        nxt = @ops[i + 1]
+        if op.is_a?(PIndirectLoad) && nxt.is_a?(PSubNeg) && use_count[op.dst] == 1
+          if nxt.b == op.dst # loaded value in B position
+            result << PIndirectLoadSubNeg.new(op.addr_var, nxt.a, nxt.label, op.id, :b,
+                        comment: "#{op.comment} [fused load+cmp+br]")
+            changed = true
+            i += 2
+          elsif nxt.a == op.dst # loaded value in A position
+            result << PIndirectLoadSubNeg.new(op.addr_var, nxt.b, nxt.label, op.id, :a,
+                        comment: "#{op.comment} [fused load+cmp+br]")
+            changed = true
+            i += 2
+          else
+            result << op
+            i += 1
+          end
         else
           result << op
           i += 1
@@ -1187,6 +1326,11 @@ module S4C
       when PPop
         d2 = op.dst == old_var ? new_var : op.dst
         d2 != op.dst ? PPop.new(d2, op.pop_id, comment: op.comment) : op
+      when PIndirectLoadSubNeg
+        a2 = op.addr_var == old_var ? new_var : op.addr_var
+        c2 = op.cmp_val == old_var ? new_var : op.cmp_val
+        (a2 != op.addr_var || c2 != op.cmp_val) ?
+          PIndirectLoadSubNeg.new(a2, c2, op.label, op.id, op.indirect_pos, comment: op.comment) : op
       when PIndirectLoad
         d2 = op.dst == old_var ? new_var : op.dst
         a2 = op.addr_var == old_var ? new_var : op.addr_var
@@ -1198,6 +1342,26 @@ module S4C
       else
         op
       end
+    end
+
+    # Helper: check if var is written before being read in straight-line
+    # code after pop_idx. Used to allow eliminating push/pop of protected
+    # vars when the restored value is immediately overwritten.
+    def written_before_read_after_pop?(pop_idx, var)
+      j = pop_idx + 1
+      while j < @ops.length
+        op_j = @ops[j]
+        # Stop at control flow boundaries (conservative)
+        return false if op_j.is_a?(PLabel) || op_j.is_a?(PGoto) ||
+                        op_j.is_a?(PSubNeg) || op_j.is_a?(PNeg) ||
+                        op_j.is_a?(PReturnJump) || op_j.is_a?(PHalt)
+        # Write before read → pop value unused
+        return true if writes(op_j).include?(var) && !reads(op_j).include?(var)
+        # Read before write → pop value needed
+        return false if reads(op_j).include?(var)
+        j += 1
+      end
+      false
     end
 
     # ── Pass: LivenessPushPopElimination ──────────────────────────────
@@ -1226,7 +1390,9 @@ module S4C
           pop_idx = pop_info[:idx]
           var = pop_info[:var]
 
-          next if protected_var?(var)
+          # Protected vars can still be eliminated if they are written before
+          # being read after the pop (the restored value is immediately overwritten).
+          next if protected_var?(var) && !written_before_read_after_pop?(pop_idx, var)
 
           # Find matching push
           matching_push = site[:pushes].find { |p| p[:var] == var }
@@ -1306,6 +1472,7 @@ module S4C
         when PGoto   then used_without_push << op.label
         when PNeg    then used_without_push << op.label
         when PSubNeg then used_without_push << op.label
+        when PIndirectLoadSubNeg then used_without_push << op.label
         when PCallSetReturn
           used_without_push << op.ret_d_label
           used_without_push << op.return_label

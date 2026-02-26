@@ -205,4 +205,23 @@ module S4C
 
     def to_s = "P_ISTORE [#{@addr_var}], #{@val}"
   end
+
+  # P_INDIRECT_LOAD_SUBNEG(addr_var, cmp_val, label, id, indirect_pos):
+  # Fused indirect load + subtract + conditional branch.
+  # indirect_pos :b → temp = mem[addr_var] - cmp_val; if < 0 goto label
+  # indirect_pos :a → temp = cmp_val - mem[addr_var]; if < 0 goto label
+  class PIndirectLoadSubNeg < PseudoOp
+    attr_reader :addr_var, :cmp_val, :label, :id, :indirect_pos
+
+    def initialize(addr_var, cmp_val, label, id, indirect_pos, comment: "")
+      super(comment: comment)
+      @addr_var = addr_var
+      @cmp_val = cmp_val
+      @label = label
+      @id = id
+      @indirect_pos = indirect_pos
+    end
+
+    def to_s = "P_ILOAD_SUBNEG [#{@addr_var}], #{@cmp_val}, #{@label} (#{@indirect_pos})"
+  end
 end

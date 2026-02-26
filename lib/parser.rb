@@ -14,7 +14,7 @@ module S4C
         line = lines[i]
 
         # Global array declaration: @name = global [N x i32] [i32 v0, i32 v1, ...], align N
-        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+\[([^\]]+)\]/
+        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak|local_unnamed_addr|unnamed_addr)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+\[([^\]]+)\]/
           name = $1
           size = $2.to_i
           elem_type = $3
@@ -26,7 +26,7 @@ module S4C
         end
 
         # Global array zeroinitializer: @name = global [N x i32] zeroinitializer
-        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+zeroinitializer/
+        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak|local_unnamed_addr|unnamed_addr)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+zeroinitializer/
           name = $1
           size = $2.to_i
           elem_type = $3
@@ -36,7 +36,7 @@ module S4C
         end
 
         # Global scalar declaration: @name = [common] [dso_local] global i32 VALUE, align N
-        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak)\s+)*(?:global|constant)\s+(\w+)\s+(-?\d+)/
+        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak|local_unnamed_addr|unnamed_addr)\s+)*(?:global|constant)\s+(\w+)\s+(-?\d+)/
           name = $1
           type = $2
           value = $3.to_i
@@ -46,7 +46,7 @@ module S4C
         end
 
         # Function definition
-        if line =~ /^define\s+(\w+)\s+@([\w.]+)\(([^)]*)\)/
+        if line =~ /^define\s+(?:[\w]+\s+)*?(\w+)\s+@([\w.]+)\(([^)]*)\)/
           ret_type = $1
           fname    = $2
           params   = parse_params($3)
@@ -357,6 +357,9 @@ module S4C
         Operand.new(:global, str[1..], type: type)
       elsif str =~ /^-?\d+$/
         Operand.new(:const, str.to_i, type: type)
+      elsif str =~ /^getelementptr\s+inbounds\s+\(i8,\s*ptr\s+@([\w.]+),\s*i64\s+(\d+)\)/
+        # Byte-offset GEP (clang -O1+): getelementptr inbounds (i8, ptr @name, i64 BYTE_OFFSET)
+        Operand.new(:global_element, { name: $1, index: $2.to_i / 4 }, type: type)
       elsif str =~ /^getelementptr\s+inbounds\s+\([^,]+,\s*ptr\s+@([\w.]+)(?:,\s*\w+\s+\d+)*,\s*\w+\s+(\d+)\)/
         # Inline constant GEP: getelementptr inbounds ([5 x i32], ptr @name, i64 0, i64 INDEX)
         Operand.new(:global_element, { name: $1, index: $2.to_i }, type: type)

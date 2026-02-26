@@ -72,6 +72,18 @@ module S4C
             prefix = flush_labels(pending_labels)
             cmt = comment && !comment.empty? ? " // #{comment}" : ""
             lines << "#{prefix}#{a}, cb:#{b_label}:0, #{c}, NEXT#{cmt}"
+          when :indirect_subneg_b
+            # Fused indirect load+cmp via B: A, cb:B_LABEL:0, C, D
+            _, a, b_label, c, d, comment = inst
+            prefix = flush_labels(pending_labels)
+            cmt = comment && !comment.empty? ? " // #{comment}" : ""
+            lines << "#{prefix}#{a}, cb:#{b_label}:0, #{c}, #{d}#{cmt}"
+          when :indirect_subneg_a
+            # Fused indirect load+cmp via A: ca:A_LABEL:0, B, C, D
+            _, a_label, b, c, d, comment = inst
+            prefix = flush_labels(pending_labels)
+            cmt = comment && !comment.empty? ? " // #{comment}" : ""
+            lines << "#{prefix}ca:#{a_label}:0, #{b}, #{c}, #{d}#{cmt}"
           end
         when Subneg4
           prefix = flush_labels(pending_labels)

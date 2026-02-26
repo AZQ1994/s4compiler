@@ -163,7 +163,8 @@ class TestOptimizer < Minitest::Test
     opt = S4C::Optimizer.new(ops, @mem)
     result = opt.optimize
     refute result.any? { |op| op.is_a?(S4C::PNeg) }
-    assert result.any? { |op| op.is_a?(S4C::PAdd) }
+    # PAdd(a, c5) is converted to PSub by add_to_sub_conversion
+    assert result.any? { |op| op.is_a?(S4C::PAdd) || op.is_a?(S4C::PSub) }
   end
 
   def test_no_fold_non_constant
@@ -175,7 +176,9 @@ class TestOptimizer < Minitest::Test
     ]
     opt = S4C::Optimizer.new(ops, @mem)
     result = opt.optimize
-    assert result.any? { |op| op.is_a?(S4C::PAdd) }
+    # PAdd(const, x) is legitimately converted to PSub(neg_const, x) by add_to_sub_conversion
+    # but should NOT be fully folded to a PCp of a constant
+    assert result.any? { |op| op.is_a?(S4C::PAdd) || op.is_a?(S4C::PSub) }
   end
 
   # ── CopyPropagation ─────────────────────────────────────────────
@@ -934,9 +937,9 @@ class TestOptimizer < Minitest::Test
     opt = S4C::Optimizer.new(ops, @mem)
     result = opt.optimize
 
-    # PAdd(cnt, c1, cnt) should be inside the loop
+    # PAdd(cnt, c1, cnt) → PSub(c_n1, cnt, cnt) should be inside the loop
     loop_idx = result.index { |op| op.is_a?(S4C::PLabel) && op.name == "loop" }
-    add_idx = result.index { |op| op.is_a?(S4C::PAdd) && op.c == cnt }
+    add_idx = result.index { |op| (op.is_a?(S4C::PAdd) || op.is_a?(S4C::PSub)) && op.c == cnt }
     assert add_idx && add_idx > loop_idx, "Variant op should NOT be hoisted"
   end
 
