@@ -578,7 +578,17 @@ module S4C
           addr_cache.clear
           op
         elsif op.is_a?(PAdd)
-          key = [normalize[op.a], normalize[op.b]].sort
+          key = [:add, *[normalize[op.a], normalize[op.b]].sort]
+          if addr_cache.key?(key) && addr_cache[key] != op.c
+            changed = true
+            PCp.new(op.c, addr_cache[key], comment: "#{op.comment} [addr reuse]")
+          else
+            addr_cache[key] = op.c
+            op
+          end
+        elsif op.is_a?(PSub) && op.b != "ZERO"
+          # PSub(a, b, c) computes c = b - a; not commutative, so key is ordered
+          key = [:sub, normalize[op.a], normalize[op.b]]
           if addr_cache.key?(key) && addr_cache[key] != op.c
             changed = true
             PCp.new(op.c, addr_cache[key], comment: "#{op.comment} [addr reuse]")
@@ -809,6 +819,50 @@ module S4C
         @ops.insert(insert_pos, PSub.new(info[:first_invariant], "ZERO", info[:neg_var],
               comment: "precompute -#{info[:first_invariant]}"))
         insert_pos += 1
+      end
+
+      # Phase 2: Also convert PAdds outside inner loops that can reuse
+      # the precomputed negation (e.g., swap block address computations).
+      # After Phase 1, all inner-loop PAdds are already PSubs, so any
+      # remaining PAdds after the precomputation point are outer-loop only.
+      # Deduplicates within basic blocks: if two PAdds compute the same
+      # address (same invariant key + same variant), the second becomes PCp.
+      phase2_addr_cache = {}  # [canonical_key, variant] → result_var
+      @ops = @ops.map.with_index do |op, i|
+        # Clear cache at control flow boundaries
+        if op.is_a?(PLabel) || op.is_a?(PGoto) || op.is_a?(PReturnJump) || op.is_a?(PHalt)
+          phase2_addr_cache.clear
+          next op
+        end
+        # Invalidate on writes to variant variables
+        w = writes(op)
+        w.each { |v| phase2_addr_cache.reject! { |k, _| k[1] == v } } unless w.empty?
+
+        next op if i < insert_pos  # before precomputation
+        next op unless op.is_a?(PAdd)
+
+        a_const = !written_vars.include?(op.a) && !const_map[op.a]
+        b_const = !written_vars.include?(op.b) && !const_map[op.b]
+
+        invariant, variant = if a_const && !b_const
+                               [op.a, op.b]
+                             elsif b_const && !a_const
+                               [op.b, op.a]
+                             end
+        next op unless invariant
+
+        key = canonical[invariant] || invariant
+        next op unless neg_cache[key]  # only if precomputation exists
+
+        cache_key = [key, variant]
+        if phase2_addr_cache[cache_key] && phase2_addr_cache[cache_key] != op.c
+          # Duplicate address: reuse earlier result instead of recomputing
+          PCp.new(op.c, phase2_addr_cache[cache_key], comment: "#{op.comment} [addr reuse]")
+        else
+          neg_var = neg_cache[key][:neg_var]
+          phase2_addr_cache[cache_key] = op.c
+          PSub.new(neg_var, variant, op.c, comment: "#{op.comment} [add→sub]")
+        end
       end
 
       true

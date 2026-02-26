@@ -1335,4 +1335,64 @@ class TestOptimizer < Minitest::Test
     precomputes = result.select { |op| op.is_a?(S4C::PSub) && op.comment&.include?("precompute") }
     assert_equal 1, precomputes.length, "Should deduplicate precomputations for same addr_of target"
   end
+
+  def test_loop_add_to_sub_outer_loop_padds_converted
+    # PAdds outside the inner loop (e.g., in swap block) should also be
+    # converted to PSub when a precomputed negation exists from inner loop.
+    base = @mem.temp
+    @mem.mark_addr_of(base, "arr")
+    iv = @mem.func_var("test", "i")
+    addr_scan = @mem.func_var("test", "as")
+    addr_swap = @mem.func_var("test", "aw")
+    cmp = @mem.func_var("test", "cmp")
+    r = retval
+
+    ops = [
+      S4C::PLabel.new("func_test"),
+      S4C::PGoto.new("scan_hdr"),
+      S4C::PLabel.new("scan_body"),
+      S4C::PSub.new(@mem.const(-1), iv, iv),
+      S4C::PLabel.new("scan_hdr"),
+      S4C::PAdd.new(iv, base, addr_scan),            # inner loop PAdd
+      S4C::PIndirectLoadSubNeg.new(addr_scan, cmp, "scan_body", "il1", :b),
+      # After inner loop exit: swap block (outer loop)
+      S4C::PAdd.new(iv, base, addr_swap),             # outer loop PAdd (same base)
+      S4C::PCp.new(r, iv),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # Inner loop PAdd should be converted to PSub
+    inner_psubs = result.select { |op| op.is_a?(S4C::PSub) && op.comment&.include?("[add→sub]") && op.c == addr_scan }
+    assert_equal 1, inner_psubs.length, "Inner loop PAdd should be converted"
+
+    # Outer loop PAdd should also be converted (PSub or PCp via addr reuse)
+    remaining_padds = result.select { |op| op.is_a?(S4C::PAdd) && op.c == addr_swap }
+    assert_empty remaining_padds, "Outer loop PAdd should be converted to PSub or eliminated"
+  end
+
+  def test_gep_address_reuse_works_for_psub
+    # gep_address_reuse should also eliminate duplicate PSub address computations
+    base = @mem.temp
+    @mem.mark_addr_of(base, "data")
+    iv = @mem.func_var("test", "x")
+    addr1 = @mem.func_var("test", "a1")
+    addr2 = @mem.func_var("test", "a2")
+    r = retval
+
+    ops = [
+      S4C::PLabel.new("func_test"),
+      S4C::PSub.new(base, iv, addr1),    # addr1 = iv - base
+      S4C::PSub.new(base, iv, addr2),    # addr2 = iv - base (SAME!)
+      S4C::PCp.new(r, addr2),
+      S4C::PHalt.new,
+    ]
+    opt = S4C::Optimizer.new(ops, @mem)
+    result = opt.optimize
+
+    # Second PSub should be eliminated (replaced by PCp or forwarded)
+    psubs = result.select { |op| op.is_a?(S4C::PSub) && (op.c == addr1 || op.c == addr2) }
+    assert psubs.length <= 1, "Duplicate PSub should be eliminated by gep_address_reuse (found #{psubs.length})"
+  end
 end
