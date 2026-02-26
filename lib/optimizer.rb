@@ -41,6 +41,7 @@ module S4C
         changed |= local_value_numbering
         changed |= loop_invariant_code_motion
         changed |= loop_rotation
+        changed |= tail_call_elimination
         changed |= write_destination_forwarding
         changed |= copy_propagation
         changed |= phi_coalescing
@@ -743,6 +744,95 @@ module S4C
         test_range: ((header_idx + 1)...cond_idx).to_a,
         body_range: ((body_label_idx + 1)...backedge_idx).to_a,
       }
+    end
+
+    # ── Pass: TailCallElimination ──────────────────────────────────
+    # Replace tail-position function calls (call followed by return) with
+    # a direct jump, eliminating push/pop save/restore overhead.
+    # Pattern: [PPush...] [arg PCp...] PCallSetReturn PGoto(func_F)
+    #          PLabel(ret) [PCp result?] [PPop...] [PCp/PLabel...] PReturnJump
+    # → [arg PCp...] PGoto(func_F)  (subsequent passes clean up dead code)
+
+    def tail_call_elimination
+      changed = false
+
+      # Find PCallSetReturn positions (process last-to-first for tail call priority)
+      indices = []
+      @ops.each_with_index { |op, i| indices << i if op.is_a?(PCallSetReturn) }
+
+      indices.reverse_each do |call_set_idx|
+        csr = @ops[call_set_idx]
+
+        # PGoto must follow (the actual call jump)
+        goto_idx = call_set_idx + 1
+        next unless goto_idx < @ops.length && @ops[goto_idx].is_a?(PGoto)
+        call_target = @ops[goto_idx].label
+        next unless call_target.start_with?('func_')
+
+        # PLabel(return_label) must follow PGoto
+        ret_label_idx = goto_idx + 1
+        next unless ret_label_idx < @ops.length &&
+                    @ops[ret_label_idx].is_a?(PLabel) &&
+                    @ops[ret_label_idx].name == csr.return_label
+
+        # Skip optional result copies (PCp between return label and pops)
+        j = ret_label_idx + 1
+        j += 1 while j < @ops.length && @ops[j].is_a?(PCp)
+
+        # Collect PPop sequence
+        pop_start = j
+        pop_end = j
+        pop_end += 1 while pop_end < @ops.length && @ops[pop_end].is_a?(PPop)
+        next if pop_start == pop_end
+
+        # Find PReturnJump scanning through only PCp and PLabel
+        ret_jump_idx = nil
+        j = pop_end
+        while j < @ops.length
+          if @ops[j].is_a?(PReturnJump)
+            ret_jump_idx = j
+            break
+          elsif @ops[j].is_a?(PCp) || @ops[j].is_a?(PLabel)
+            j += 1
+          else
+            break
+          end
+        end
+        next unless ret_jump_idx
+
+        our_ret_d = @ops[ret_jump_idx].d_label
+        callee_ret_d = csr.ret_d_label
+
+        # Walk backward from PCallSetReturn: arg setups (PCp) then pushes (PPush)
+        j = call_set_idx - 1
+        j -= 1 while j >= 0 && @ops[j].is_a?(PCp)
+        arg_start = j + 1
+
+        j -= 1 while j >= 0 && @ops[j].is_a?(PPush)
+        push_start = j + 1
+
+        push_count = arg_start - push_start
+        pop_count = pop_end - pop_start
+        next if push_count == 0
+        next unless push_count == pop_count
+
+        # Build replacement: arg setups + optional ret_d forward + tail jump
+        replacement = (arg_start...call_set_idx).map { |k| @ops[k] }
+
+        unless our_ret_d == callee_ret_d
+          # Cross-function tail call: forward our return address to callee
+          replacement << PCp.new(callee_ret_d, our_ret_d, comment: "tail call: forward return addr")
+        end
+
+        replacement << PGoto.new(call_target, comment: "#{@ops[goto_idx].comment} [tail call]")
+
+        # Replace [push_start..goto_idx] with replacement
+        @ops = @ops[0...push_start] + replacement + @ops[(goto_idx + 1)..]
+        changed = true
+        break # indices stale; let iterative optimizer handle remaining
+      end
+
+      changed
     end
 
     # ── Pass: WriteDestinationForwarding ─────────────────────────────
