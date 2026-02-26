@@ -468,4 +468,20 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 30, sim.read_label('main___retval')
   end
+
+  def test_memset
+    # memset struct to zero, set d.a=42; return d.a+d.b+d.c = 42
+    sim, result, _ = compile_and_run(fixture('memset.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 42, sim.read_label('main___retval')
+  end
+
+  def test_func_ptr
+    # Function pointer: apply(&add,3,5)+apply(&sub,10,3) = 8+7 = 15
+    sim, result, _ = compile_and_run(fixture('func_ptr.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 15, sim.read_label('main___retval')
+  end
 end

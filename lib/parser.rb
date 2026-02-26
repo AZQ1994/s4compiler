@@ -125,7 +125,7 @@ module S4C
 
     # Parse function parameter list: "i32 noundef %0, i32 noundef %1" → [["i32","0"], ["i32","1"]]
     # Strips parameter attributes like noundef, signext, zeroext, etc.
-    PARAM_ATTRS = %w[noundef signext zeroext inreg byval sret nonnull dereferenceable nocapture readonly writeonly immarg].freeze
+    PARAM_ATTRS = %w[noundef signext zeroext inreg byval sret nonnull dereferenceable nocapture readonly writeonly immarg noalias].freeze
 
     def parse_params(param_str)
       return [] if param_str.strip.empty?
@@ -312,29 +312,38 @@ module S4C
       end
     end
 
-    # "i32 @func(i32 noundef %a, i32 noundef %b)"
+    # "i32 @func(i32 noundef %a, i32 noundef %b)" or "i32 %fptr(i32 noundef %a)"
     def parse_call_operands(rest)
       if rest =~ /^(\w+)\s+@([\w.]+)\(([^)]*)\)/
         _ret_type = $1
         func_name = $2
-        args = $3.split(',').map(&:strip).reject(&:empty?).map do |a|
-          parts = a.split(/\s+/)
-          type = parts.shift
-          # Skip parameter attributes (including 'align N' as a 2-token attribute)
-          loop do
-            if parts.any? && PARAM_ATTRS.include?(parts[0])
-              parts.shift
-            elsif parts[0] == 'align' && parts.length > 1
-              parts.shift(2)
-            else
-              break
-            end
-          end
-          parse_value(parts.join(' ').strip, type)
-        end
+        args = parse_call_args($3)
         [Operand.new(:label, func_name)] + args
+      elsif rest =~ /^(\w+)\s+%([\w.]+)\(([^)]*)\)/
+        _ret_type = $1
+        var_name = $2
+        args = parse_call_args($3)
+        [Operand.new(:var, var_name)] + args
       else
         [Operand.new(:raw, rest)]
+      end
+    end
+
+    def parse_call_args(args_str)
+      args_str.split(',').map(&:strip).reject(&:empty?).map do |a|
+        parts = a.split(/\s+/)
+        type = parts.shift
+        # Skip parameter attributes (including 'align N' as a 2-token attribute)
+        loop do
+          if parts.any? && PARAM_ATTRS.include?(parts[0])
+            parts.shift
+          elsif parts[0] == 'align' && parts.length > 1
+            parts.shift(2)
+          else
+            break
+          end
+        end
+        parse_value(parts.join(' ').strip, type)
       end
     end
 

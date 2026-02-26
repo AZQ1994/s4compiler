@@ -2,6 +2,7 @@
 
 require_relative 'pseudo_ops'
 require_relative 'memory'
+require 'set'
 
 module S4C
   # Lowers IR instructions into pseudo-operations.
@@ -53,6 +54,18 @@ module S4C
       # First pass: register all functions and their params
       ir_module.functions.each do |func|
         register_function(func)
+      end
+
+      # Collect address-taken functions (used as values, not just called)
+      @address_taken_funcs = Set.new
+      ir_module.functions.each do |func|
+        func.blocks.each do |block|
+          block.instructions.each do |inst|
+            inst.operands.each do |op|
+              @address_taken_funcs.add(op.value) if op.global? && @functions.key?(op.value)
+            end
+          end
+        end
       end
 
       # Find the entry function (main, or last if no main)
@@ -1356,14 +1369,176 @@ module S4C
       end
     end
 
-    # %r = call i32 @func(i32 %a, i32 %b)
-    # operands: [label:func_name, arg0, arg1, ...]
+    # Handle llvm.memset intrinsic: fill memory with a byte value
+    # operands: [label:llvm.memset..., dst, byte_val, byte_count, is_volatile]
+    def lower_memset(inst)
+      dst_op = inst.operands[1]
+      byte_val_op = inst.operands[2]
+      byte_count_op = inst.operands[3]
+
+      unless byte_count_op&.const?
+        emit PLabel.new("", comment: "UNSUPPORTED: memset with non-constant size")
+        return
+      end
+      unless byte_val_op&.const?
+        emit PLabel.new("", comment: "UNSUPPORTED: memset with non-constant value")
+        return
+      end
+
+      word_count = byte_count_op.value / 4
+      byte_val = byte_val_op.value
+      word_val = if byte_val == 0
+                   0
+                 else
+                   byte_val | (byte_val << 8) | (byte_val << 16) | (byte_val << 24)
+                 end
+      const_word_val = @mem.const(word_val)
+
+      dst_name = dst_op.var? ? dst_op.value : nil
+      dst_is_ptr = dst_name && is_pointer?(dst_name)
+
+      if !dst_is_ptr && dst_name
+        # Local alloca — direct word-by-word set
+        word_count.times do |i|
+          dst_elem = @mem.func_array_element(@current_func, dst_name, i)
+          if dst_elem
+            emit PCp.new(dst_elem, const_word_val, comment: "memset word #{i}")
+          end
+        end
+      else
+        # Pointer — use indirect store
+        dst_label = resolve_operand(dst_op)
+        word_count.times do |i|
+          id = @indirect_id += 1
+          if i > 0
+            offset_const = @mem.const(i)
+            dst_addr = @mem.temp
+            emit PAdd.new(offset_const, dst_label, dst_addr, comment: "memset dst addr + #{i}")
+            emit PIndirectStore.new(dst_addr, const_word_val, "ms_w#{id}", comment: "memset store word #{i}")
+          else
+            emit PIndirectStore.new(dst_label, const_word_val, "ms_w#{id}", comment: "memset store word 0")
+          end
+        end
+      end
+    end
+
+    # Indirect call via function pointer: dispatch table approach
+    def lower_indirect_call(inst)
+      func_ptr_var = resolve_operand(inst.operands[0])
+      args = inst.operands[1..]
+      arg_count = args.length
+
+      # Find candidate functions (address-taken with matching arity)
+      candidates = @address_taken_funcs.select do |fname|
+        @functions[fname][:params].length == arg_count
+      end.to_a
+
+      if candidates.empty?
+        emit PLabel.new("", comment: "UNSUPPORTED: indirect call with no candidates")
+        fvar(inst.result) if inst.result
+        return
+      end
+
+      @call_id += 1
+      call_id = @call_id
+      icall_done_label = @mem.alloc_label("#{@current_func}_icall_done_#{call_id}")
+
+      # Save caller state (once)
+      caller_info = @functions[@current_func]
+      save_labels = @mem.func_all_labels(@current_func)
+      save_labels = save_labels + [caller_info[:ret_d_label]] if caller_info && @current_func != 'main'
+
+      save_labels.each_with_index do |label, i|
+        emit PPush.new(label, "#{call_id}_s#{i}", comment: "save #{label}")
+      end
+
+      # Allocate result temp before dispatch (not part of saved state)
+      result_temp = @mem.temp if inst.result
+
+      # Dispatch: compare func_ptr with each candidate's address
+      candidates.each do |fname|
+        callee = @functions[fname]
+
+        @cmp_id += 1
+        cmp_id = @cmp_id
+        not_match_label = @mem.alloc_label("#{@current_func}_ic_nm#{cmp_id}")
+
+        # Address of candidate function
+        addr_temp = @mem.temp
+        @mem.mark_addr_of(addr_temp, "func_#{fname}")
+
+        # Equality check: diff = addr_temp - func_ptr
+        diff = @mem.temp
+        neg_diff = @mem.temp
+        emit PSub.new(func_ptr_var, addr_temp, diff, comment: "icall: ptr == &#{fname}?")
+        emit PNeg.new(diff, not_match_label, comment: "icall: diff < 0 → skip")
+        emit PSub.new(diff, @mem.zero, neg_diff, comment: "icall: negate diff")
+        emit PNeg.new(neg_diff, not_match_label, comment: "icall: -diff < 0 → skip")
+
+        # Match! Copy args to callee params
+        ret_label = @mem.alloc_label("#{@current_func}_icret_#{call_id}_#{fname}")
+
+        args.each_with_index do |arg, i|
+          next unless i < callee[:params].length
+          param_type = callee[:param_types][i]
+          if param_type == 'ptr' && arg.var? && !is_pointer?(arg.value)
+            val = resolve_operand(arg)
+            at = @mem.temp
+            @mem.mark_addr_of(at, val)
+            emit PCp.new(callee[:params][i], at, comment: "icall arg #{i}: &#{op_str(arg)}")
+          else
+            val = resolve_operand(arg)
+            emit PCp.new(callee[:params][i], val, comment: "icall arg #{i}: #{op_str(arg)}")
+          end
+        end
+
+        emit PCallSetReturn.new(callee[:ret_d_label], ret_label, comment: "icall set return for #{fname}")
+        emit PGoto.new("func_#{fname}", comment: "icall → #{fname}")
+        emit PLabel.new(ret_label, comment: "icall return from #{fname}")
+
+        if inst.result
+          emit PCp.new(result_temp, callee[:retval], comment: "icall save #{fname}() result")
+        end
+
+        emit PGoto.new(icall_done_label, comment: "icall done")
+        emit PLabel.new(not_match_label)
+      end
+
+      # Fall-through for no match (should not happen in well-formed programs)
+      emit PLabel.new(icall_done_label)
+
+      # Restore caller state (once)
+      save_labels.reverse.each_with_index do |label, i|
+        emit PPop.new(label, "#{call_id}_r#{i}", comment: "restore #{label}")
+      end
+
+      # Copy result to final destination
+      if inst.result
+        r = fvar(inst.result)
+        emit PCp.new(r, result_temp, comment: "#{inst.result} = icall result")
+      end
+    end
+
+    # %r = call i32 @func(i32 %a, i32 %b) or %r = call i32 %fptr(i32 %a)
+    # operands: [label:func_name, arg0, arg1, ...] or [var:fptr, arg0, arg1, ...]
     def lower_call(inst)
+      # Indirect call (function pointer)
+      if inst.operands[0].var?
+        lower_indirect_call(inst)
+        return
+      end
+
       func_name = inst.operands[0].value
 
       # Dispatch llvm.memcpy intrinsic
       if func_name.start_with?('llvm.memcpy')
         lower_memcpy(inst)
+        return
+      end
+
+      # Dispatch llvm.memset intrinsic
+      if func_name.start_with?('llvm.memset')
+        lower_memset(inst)
         return
       end
 
@@ -1512,7 +1687,14 @@ module S4C
       when :var    then fvar(op.value)
       when :const  then @mem.const(op.value)
       when :label  then bb_label(op.value)
-      when :global then resolve_global(op.value)
+      when :global
+        if @functions.key?(op.value)
+          temp = @mem.temp
+          @mem.mark_addr_of(temp, "func_#{op.value}")
+          temp
+        else
+          resolve_global(op.value)
+        end
       when :global_element then resolve_global_element(op.value[:name], op.value[:index])
       else
         raise "Cannot resolve operand: #{op}"
