@@ -707,13 +707,15 @@ module S4C
           has_call = true if @ops[i].is_a?(PCallSetReturn)
         end
 
-        # If loop contains subroutine calls, their shared result variables
-        # (e.g. __mul_result, __srem_remainder) are modified outside the loop
-        # body's index range. Treat all __-prefixed vars as loop-variant.
+        # If loop contains function/subroutine calls, variables modified by
+        # the called code are outside the loop body's index range but must
+        # still be treated as loop-variant:
+        #   - __-prefixed vars: subroutine shared results (__mul_result, etc.)
+        #   - *___retval vars: function return values (safe___retval, etc.)
         if has_call
           @ops.each do |op|
             (reads(op) + writes(op)).each do |v|
-              loop_defs << v if v.start_with?('__')
+              loop_defs << v if v.start_with?('__') || v.end_with?('___retval')
             end
           end
         end
@@ -1748,6 +1750,8 @@ module S4C
           # - PGoto func_* without preceding PCallSetReturn (tail call)
           # Regular calls (PCallSetReturn + PGoto func_*) don't break.
           # Local PGoto and PLabel are traversed (conservative within function).
+          # Back-edges (PGoto to a label before the pop) are conservatively
+          # treated as "used" since a loop iteration may read the variable.
           used_after = false
           pending_call_ua = false
           ((pop_idx + 1)...@ops.length).each do |j|
@@ -1768,6 +1772,16 @@ module S4C
                 break  # tail call → function exits
               end
               next
+            end
+            # Back-edge detection: if a local goto targets a label before the
+            # pop, the code loops and the variable may be read on a subsequent
+            # iteration. Conservatively treat as used.
+            if op_j.is_a?(PGoto) && !op_j.label.start_with?("func_")
+              target_pos = @ops.index { |o| o.is_a?(PLabel) && o.name == op_j.label }
+              if target_pos && target_pos <= pop_idx
+                used_after = true
+                break
+              end
             end
             next if op_j.is_a?(PPush)  # exclude PPush reads (break circular dep)
             if reads(op_j).include?(var)

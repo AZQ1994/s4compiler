@@ -500,4 +500,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 32, sim.read_label('main___retval')
   end
+
+  def test_nqueens
+    # 8-Queens: count all solutions via recursive backtracking = 92
+    sim, result, _ = compile_and_run(fixture('nqueens.ll'), max_cycles: 500_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 92, sim.read_label('main___retval')
+  end
 end
