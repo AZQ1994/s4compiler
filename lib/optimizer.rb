@@ -40,6 +40,7 @@ module S4C
         changed |= cmp_branch_fusion
         changed |= local_value_numbering
         changed |= loop_invariant_code_motion
+        changed |= write_destination_forwarding
         changed |= copy_propagation
         changed |= phi_coalescing
         changed |= dead_store_elimination
@@ -602,6 +603,57 @@ module S4C
       changed
     end
 
+    # ── Pass: WriteDestinationForwarding ─────────────────────────────
+    # If an instruction writes to X and the next op is PCp(Y, X) where X
+    # has exactly one read (the PCp itself), change the instruction to
+    # write directly to Y and remove the PCp.  Saves 1 SUBNEG4 per site.
+
+    def write_destination_forwarding
+      read_count = Hash.new(0)
+      @ops.each do |op|
+        reads(op).each { |v| read_count[v] += 1 }
+      end
+
+      changed = false
+      result = []
+      i = 0
+      while i < @ops.length
+        op = @ops[i]
+        nxt = @ops[i + 1] if i + 1 < @ops.length
+
+        if nxt.is_a?(PCp)
+          w = writes(op)
+          if w.length == 1 && w[0] == nxt.src &&
+             read_count[nxt.src] == 1 &&
+             !protected_var?(nxt.src) && !protected_var?(nxt.dst)
+            forwarded = forward_write_dst(op, nxt.dst)
+            if forwarded
+              result << forwarded
+              changed = true
+              i += 2
+              next
+            end
+          end
+        end
+
+        result << op
+        i += 1
+      end
+
+      @ops = result
+      changed
+    end
+
+    def forward_write_dst(op, new_dst)
+      case op
+      when PAdd then PAdd.new(op.a, op.b, new_dst, comment: op.comment)
+      when PSub then PSub.new(op.a, op.b, new_dst, comment: op.comment)
+      when PIndirectLoad then PIndirectLoad.new(new_dst, op.addr_var, op.id, comment: op.comment)
+      when PCp then PCp.new(new_dst, op.src, comment: op.comment)
+      else nil
+      end
+    end
+
     # ── Pass 11: CopyPropagation ───────────────────────────────────────
     # Single-pass forward substitution within straight-line blocks.
     # Resets substitution map at PLabel and barrier boundaries.
@@ -621,6 +673,25 @@ module S4C
           end
           result << op
           prev_falls_through = true
+          next
+        end
+
+        # PIndirectLoad: only invalidate dst (doesn't modify other variables)
+        if op.is_a?(PIndirectLoad)
+          modified = substitute_reads(op, subst)
+          changed = true if modified != op
+          result << modified
+          dst = modified.dst
+          subst.delete_if { |_t, src| src == dst }
+          subst.delete(dst)
+          next
+        end
+
+        # PPush: keep subst alive across PPush (it only reads val, no tracked
+        # variable writes). Do NOT substitute PPush's val — changing it breaks
+        # push/pop variable-name matching used by liveness_push_pop_elimination.
+        if op.is_a?(PPush)
+          result << op
           next
         end
 
