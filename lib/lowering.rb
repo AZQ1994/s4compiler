@@ -30,7 +30,13 @@ module S4C
       @globals_map ||= {}
       ir_module.globals.each do |g|
         label = "global_#{g[:name]}"
-        if g[:array]
+        if g[:struct_type]
+          # Global struct: allocate as consecutive words (like an array)
+          @mem.alloc_global_array(label, g[:values])
+          @globals_map[g[:name]] = label
+          @global_arrays ||= {}
+          @global_arrays[g[:name]] = { base: label, size: g[:values].length }
+        elsif g[:array]
           @mem.alloc_global_array(label, g[:values])
           @globals_map[g[:name]] = label
           @global_arrays ||= {}
@@ -1032,9 +1038,11 @@ module S4C
 
     def lower_alloca(inst)
       if inst.operands.length >= 2 && inst.operands[0].const?
-        # Array alloca: [N x type]
-        size = inst.operands[0].value
-        @mem.func_alloca_array(@current_func, inst.result, size)
+        # Array alloca: [N x type] or [N x %struct.X]
+        count = inst.operands[0].value
+        elem_type = inst.operands[1]&.value
+        total = elem_type&.start_with?('%') ? count * type_word_size(elem_type) : count
+        @mem.func_alloca_array(@current_func, inst.result, total)
       elsif inst.operands[0]&.kind == :type && inst.operands[0].value.start_with?('%')
         # Struct alloca: %struct.Point
         size = type_word_size(inst.operands[0].value)
@@ -1046,6 +1054,17 @@ module S4C
 
     # %r = getelementptr inbounds [3 x i32], ptr %base, i64 0, i64 INDEX
     def lower_gep(inst)
+      # Detect struct array type: [N x %struct.X]
+      struct_array_raw = inst.operands.find { |o| o.raw? && o.value.to_s =~ /^\[(\d+)\s*x\s*%([\w.]+)\]$/ }
+      if struct_array_raw
+        struct_array_raw.value =~ /^\[(\d+)\s*x\s*%([\w.]+)\]$/
+        sa_struct_name = $2
+        if @struct_types[sa_struct_name]
+          lower_struct_array_gep(inst, sa_struct_name)
+          return
+        end
+      end
+
       # Detect struct type in operands
       struct_raw = inst.operands.find { |o| o.raw? && o.value.to_s.start_with?('%') }
       struct_name = struct_raw&.value&.then { |v| v[1..] }
@@ -1126,6 +1145,55 @@ module S4C
       else
         fvar(inst.result)
         emit PLabel.new("", comment: "UNSUPPORTED GEP: #{inst.raw}")
+      end
+    end
+
+    # Handle struct array GEP: getelementptr inbounds [N x %struct.X], ptr %base, i64 0, i64 INDEX
+    def lower_struct_array_gep(inst, struct_name)
+      base_op = inst.operands.find { |o| o.var? || o.global? }
+      non_base_ops = inst.operands.reject { |o| o.raw? || o == base_op }
+
+      index_op = non_base_ops.last
+      struct_word_size = type_word_size("%#{struct_name}")
+      base_name = base_op.value
+      key = "#{@current_func}::#{inst.result}"
+
+      if index_op.const?
+        word_offset = index_op.value * struct_word_size
+        element_label = @mem.func_array_element(@current_func, base_name, word_offset)
+        if element_label
+          @mem.set_alias(key, element_label)
+          @struct_gep_info[key] = { base_array: base_name, offset: word_offset, struct_name: struct_name }
+        else
+          fvar(inst.result)
+          emit PLabel.new("", comment: "struct array GEP fallback: #{inst.raw}")
+        end
+      else
+        # Variable index: compute address at runtime
+        index_label = resolve_operand(index_op)
+        base_label = fvar(base_name)
+        addr_source = @mem.temp
+        @mem.mark_addr_of(addr_source, base_label)
+        if struct_word_size > 1
+          scale_const = @mem.const(struct_word_size)
+          ensure_mul_subroutine
+          mul = @builtins[:mul]
+          @call_id += 1
+          ret_label = "#{@current_func}_samulret#{@call_id}"
+          @mem.alloc_label(ret_label)
+          emit PCp.new(mul[:arg1], index_label, comment: "struct array GEP: index")
+          emit PCp.new(mul[:arg2], scale_const, comment: "struct array GEP: scale #{struct_word_size}")
+          emit PCallSetReturn.new(mul[:ret_d], ret_label, comment: "struct array GEP: mul return")
+          emit PGoto.new("__mul", comment: "call __mul")
+          emit PLabel.new(ret_label, comment: "return from __mul")
+          r = fvar(inst.result)
+          emit PAdd.new(mul[:result], addr_source, r, comment: "struct array GEP #{inst.result}")
+        else
+          r = fvar(inst.result)
+          emit PAdd.new(index_label, addr_source, r, comment: "struct array GEP #{inst.result}")
+        end
+        mark_pointer(inst.result)
+        @struct_gep_info[key] = { pointer: true, offset: 0, struct_name: struct_name }
       end
     end
 
@@ -1237,10 +1305,68 @@ module S4C
       end
     end
 
+    # Handle llvm.memcpy intrinsic: word-by-word copy
+    # operands: [label:llvm.memcpy..., dst, src, byte_count, is_volatile]
+    def lower_memcpy(inst)
+      dst_op = inst.operands[1]
+      src_op = inst.operands[2]
+      byte_count_op = inst.operands[3]
+
+      unless byte_count_op&.const?
+        emit PLabel.new("", comment: "UNSUPPORTED: memcpy with non-constant size")
+        return
+      end
+
+      word_count = byte_count_op.value / 4
+      dst_name = dst_op.var? ? dst_op.value : nil
+      src_name = src_op.var? ? src_op.value : nil
+      dst_is_ptr = dst_name && is_pointer?(dst_name)
+      src_is_ptr = src_name && is_pointer?(src_name)
+
+      if !dst_is_ptr && !src_is_ptr && dst_name && src_name
+        # Both are local alloca — direct word-by-word copy
+        word_count.times do |i|
+          src_elem = @mem.func_array_element(@current_func, src_name, i)
+          dst_elem = @mem.func_array_element(@current_func, dst_name, i)
+          if src_elem && dst_elem
+            emit PCp.new(dst_elem, src_elem, comment: "memcpy word #{i}")
+          end
+        end
+      else
+        # At least one is a pointer — use indirect load/store
+        dst_label = resolve_operand(dst_op)
+        src_label = resolve_operand(src_op)
+        word_count.times do |i|
+          id = @indirect_id += 1
+          if i > 0
+            offset_const = @mem.const(i)
+            src_addr = @mem.temp
+            dst_addr = @mem.temp
+            emit PAdd.new(offset_const, src_label, src_addr, comment: "memcpy src addr + #{i}")
+            emit PAdd.new(offset_const, dst_label, dst_addr, comment: "memcpy dst addr + #{i}")
+            temp = @mem.temp
+            emit PIndirectLoad.new(temp, src_addr, "mc_r#{id}", comment: "memcpy load word #{i}")
+            emit PIndirectStore.new(dst_addr, temp, "mc_w#{id}", comment: "memcpy store word #{i}")
+          else
+            temp = @mem.temp
+            emit PIndirectLoad.new(temp, src_label, "mc_r#{id}", comment: "memcpy load word 0")
+            emit PIndirectStore.new(dst_label, temp, "mc_w#{id}", comment: "memcpy store word 0")
+          end
+        end
+      end
+    end
+
     # %r = call i32 @func(i32 %a, i32 %b)
     # operands: [label:func_name, arg0, arg1, ...]
     def lower_call(inst)
       func_name = inst.operands[0].value
+
+      # Dispatch llvm.memcpy intrinsic
+      if func_name.start_with?('llvm.memcpy')
+        lower_memcpy(inst)
+        return
+      end
+
       args = inst.operands[1..]
       callee = @functions[func_name]
 

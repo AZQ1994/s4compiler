@@ -444,4 +444,28 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 300, sim.read_label('main___retval')
   end
+
+  def test_global_struct
+    # Global struct: origin={10,20}; return origin.x + origin.y = 30
+    sim, result, _ = compile_and_run(fixture('global_struct.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 30, sim.read_label('main___retval')
+  end
+
+  def test_struct_array
+    # Struct array: pts[3]={{1,2},{3,4},{5,6}}; return pts[0].x + pts[1].y + pts[2].x = 1+4+5 = 10
+    sim, result, _ = compile_and_run(fixture('struct_array.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 10, sim.read_label('main___retval')
+  end
+
+  def test_struct_memcpy
+    # Struct memcpy: a={10,20}; b=a; return b.x + b.y = 30
+    sim, result, _ = compile_and_run(fixture('struct_memcpy.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 30, sim.read_label('main___retval')
+  end
 end

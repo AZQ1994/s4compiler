@@ -22,6 +22,16 @@ module S4C
           next
         end
 
+        # Global struct declaration: @origin = global %struct.Point { i32 10, i32 20 }, align 4
+        if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak|local_unnamed_addr|unnamed_addr)\s+)*(?:global|constant)\s+%([\w.]+)\s*\{([^}]+)\}/
+          name = $1
+          struct_type = $2
+          values = $3.scan(/\w+\s+(-?\d+)/).flatten.map(&:to_i)
+          mod.globals << { name: name, struct_type: struct_type, array: true, size: values.length, values: values }
+          i += 1
+          next
+        end
+
         # Global array declaration: @name = global [N x i32] [i32 v0, i32 v1, ...], align N
         if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak|local_unnamed_addr|unnamed_addr)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+\[([^\]]+)\]/
           name = $1
@@ -115,15 +125,23 @@ module S4C
 
     # Parse function parameter list: "i32 noundef %0, i32 noundef %1" → [["i32","0"], ["i32","1"]]
     # Strips parameter attributes like noundef, signext, zeroext, etc.
-    PARAM_ATTRS = %w[noundef signext zeroext inreg byval sret nonnull dereferenceable nocapture readonly].freeze
+    PARAM_ATTRS = %w[noundef signext zeroext inreg byval sret nonnull dereferenceable nocapture readonly writeonly immarg].freeze
 
     def parse_params(param_str)
       return [] if param_str.strip.empty?
       param_str.split(',').map do |p|
         parts = p.strip.split(/\s+/)
         type = parts.shift
-        # Skip parameter attributes
-        parts.shift while parts.any? && PARAM_ATTRS.include?(parts[0])
+        # Skip parameter attributes (including 'align N' as a 2-token attribute)
+        loop do
+          if parts.any? && PARAM_ATTRS.include?(parts[0])
+            parts.shift
+          elsif parts[0] == 'align' && parts.length > 1
+            parts.shift(2)
+          else
+            break
+          end
+        end
         name = parts[0]&.delete_prefix('%') || ""
         [type, name]
       end
@@ -262,9 +280,12 @@ module S4C
       end
     end
 
-    # "i32, align 4" or "[3 x i32], align 4"
+    # "i32, align 4" or "[3 x i32], align 4" or "[3 x %struct.Point], align 4"
     def parse_alloca_operands(rest)
-      if rest =~ /^\[(\d+)\s*x\s*(\w+)\]/
+      if rest =~ /^\[(\d+)\s*x\s*%([\w.]+)\]/
+        # Struct array alloca: [N x %struct.X]
+        [Operand.new(:const, $1.to_i), Operand.new(:type, "%#{$2}")]
+      elsif rest =~ /^\[(\d+)\s*x\s*(\w+)\]/
         # Array alloca: [N x type]
         [Operand.new(:const, $1.to_i), Operand.new(:type, $2)]
       elsif rest =~ /^%([\w.]+)/
@@ -299,8 +320,16 @@ module S4C
         args = $3.split(',').map(&:strip).reject(&:empty?).map do |a|
           parts = a.split(/\s+/)
           type = parts.shift
-          # Skip parameter attributes (noundef, signext, etc.)
-          parts.shift while parts.any? && PARAM_ATTRS.include?(parts[0])
+          # Skip parameter attributes (including 'align N' as a 2-token attribute)
+          loop do
+            if parts.any? && PARAM_ATTRS.include?(parts[0])
+              parts.shift
+            elsif parts[0] == 'align' && parts.length > 1
+              parts.shift(2)
+            else
+              break
+            end
+          end
           parse_value(parts.join(' ').strip, type)
         end
         [Operand.new(:label, func_name)] + args
