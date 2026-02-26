@@ -90,11 +90,12 @@ module S4C
 
   # Top-level module containing functions and globals
   class IRModule
-    attr_reader :functions, :globals
+    attr_reader :functions, :globals, :struct_types
 
     def initialize
       @functions = []
       @globals   = []
+      @struct_types = {}  # "struct.Point" => ["i32", "i32"]
     end
 
     def <<(func)

@@ -13,6 +13,15 @@ module S4C
       while i < lines.length
         line = lines[i]
 
+        # Struct type definition: %struct.Point = type { i32, i32 }
+        if line =~ /^%([\w.]+)\s*=\s*type\s*\{([^}]+)\}/
+          name = $1  # "struct.Point"
+          fields = $2.split(',').map(&:strip)
+          mod.struct_types[name] = fields
+          i += 1
+          next
+        end
+
         # Global array declaration: @name = global [N x i32] [i32 v0, i32 v1, ...], align N
         if line =~ /^@([\w.]+)\s*=\s*(?:(?:common|dso_local|external|internal|private|weak|local_unnamed_addr|unnamed_addr)\s+)*(?:global|constant)\s+\[(\d+)\s+x\s+(\w+)\]\s+\[([^\]]+)\]/
           name = $1
@@ -258,6 +267,9 @@ module S4C
       if rest =~ /^\[(\d+)\s*x\s*(\w+)\]/
         # Array alloca: [N x type]
         [Operand.new(:const, $1.to_i), Operand.new(:type, $2)]
+      elsif rest =~ /^%([\w.]+)/
+        # Struct alloca: %struct.Point
+        [Operand.new(:type, "%#{$1}")]
       elsif rest =~ /^(\w+)/
         [Operand.new(:type, $1)]
       else

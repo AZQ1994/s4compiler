@@ -420,4 +420,28 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 60, sim.read_label('main___retval')
   end
+
+  def test_struct_point
+    # Flat struct: Point{x=10, y=20}, return x+y = 30
+    sim, result, _ = compile_and_run(fixture('struct_point.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 30, sim.read_label('main___retval')
+  end
+
+  def test_struct_rect
+    # Nested struct: Rect{Point{1,2}, Point{3,4}}, return p1.x + p2.y = 1 + 4 = 5
+    sim, result, _ = compile_and_run(fixture('struct_rect.ll'))
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 5, sim.read_label('main___retval')
+  end
+
+  def test_struct_func
+    # Struct pointer to function: set_point(&p, 100, 200); return p.x + p.y = 300
+    sim, result, _ = compile_and_run(fixture('struct_func.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 300, sim.read_label('main___retval')
+  end
 end

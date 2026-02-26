@@ -20,6 +20,8 @@ module S4C
       @cmp_id = 0           # unique ID for inline comparison labels
       @pointers = {}        # "func::ir_name" → true (tracks variables that hold computed addresses)
       @indirect_id = 0      # unique ID for indirect load/store operations
+      @struct_types = {}    # "struct.Point" => ["i32", "i32"]
+      @struct_gep_info = {} # "func::ir_name" => { base_array:, offset:, struct_name: }
     end
 
     # Lower an entire IR module
@@ -38,6 +40,9 @@ module S4C
           @globals_map[g[:name]] = label
         end
       end
+
+      # Store struct type definitions
+      @struct_types = ir_module.struct_types
 
       # First pass: register all functions and their params
       ir_module.functions.each do |func|
@@ -1030,6 +1035,10 @@ module S4C
         # Array alloca: [N x type]
         size = inst.operands[0].value
         @mem.func_alloca_array(@current_func, inst.result, size)
+      elsif inst.operands[0]&.kind == :type && inst.operands[0].value.start_with?('%')
+        # Struct alloca: %struct.Point
+        size = type_word_size(inst.operands[0].value)
+        @mem.func_alloca_array(@current_func, inst.result, size)
       else
         @mem.func_alloca(@current_func, inst.result)
       end
@@ -1037,6 +1046,15 @@ module S4C
 
     # %r = getelementptr inbounds [3 x i32], ptr %base, i64 0, i64 INDEX
     def lower_gep(inst)
+      # Detect struct type in operands
+      struct_raw = inst.operands.find { |o| o.raw? && o.value.to_s.start_with?('%') }
+      struct_name = struct_raw&.value&.then { |v| v[1..] }
+
+      if struct_name && @struct_types[struct_name]
+        lower_struct_gep(inst, struct_name)
+        return
+      end
+
       # operands: [raw:[3 x i32], var:base, const:0, const:index] or with var index
       # base can be a local var or a global (@data)
       base_op = inst.operands.find { |o| o.var? || o.global? }
@@ -1108,6 +1126,80 @@ module S4C
       else
         fvar(inst.result)
         emit PLabel.new("", comment: "UNSUPPORTED GEP: #{inst.raw}")
+      end
+    end
+
+    # Handle struct GEP: getelementptr inbounds %struct.X, ptr %base, i32 0, i32 FIELD
+    def lower_struct_gep(inst, struct_name)
+      base_op = inst.operands.find { |o| o.var? || o.global? }
+      non_base_ops = inst.operands.reject { |o| o.raw? || o == base_op }
+
+      field_idx = non_base_ops.last.value
+      word_offset = struct_field_offset(struct_name, field_idx)
+      fields = @struct_types[struct_name]
+      field_type = fields[field_idx] if fields
+
+      base_name = base_op.value
+      key = "#{@current_func}::#{inst.result}"
+
+      # Check if base is a previous struct GEP result (chained GEP)
+      base_gep_info = @struct_gep_info["#{@current_func}::#{base_name}"]
+
+      if base_gep_info
+        # Chained GEP: accumulate offset from the original base array
+        total_offset = base_gep_info[:offset] + word_offset
+        if base_gep_info[:pointer]
+          # Base was a pointer-based GEP: compute at runtime
+          base_label = fvar(base_name)
+          if total_offset == 0
+            @mem.set_alias(key, base_label)
+          else
+            offset_const = @mem.const(total_offset)
+            r = fvar(inst.result)
+            emit PAdd.new(offset_const, base_label, r, comment: "struct GEP #{inst.result} = #{base_name} + #{total_offset}")
+          end
+          mark_pointer(inst.result)
+          if field_type&.start_with?('%') && @struct_types[field_type[1..]]
+            @struct_gep_info[key] = { pointer: true, offset: 0, struct_name: field_type[1..] }
+          end
+        else
+          element_label = @mem.func_array_element(@current_func, base_gep_info[:base_array], total_offset)
+          if element_label
+            @mem.set_alias(key, element_label)
+            if field_type&.start_with?('%') && @struct_types[field_type[1..]]
+              @struct_gep_info[key] = { base_array: base_gep_info[:base_array], offset: total_offset, struct_name: field_type[1..] }
+            end
+          else
+            fvar(inst.result)
+            emit PLabel.new("", comment: "struct chained GEP fallback: #{inst.raw}")
+          end
+        end
+      elsif is_pointer?(base_name)
+        # Base is a pointer (e.g., function parameter)
+        base_label = fvar(base_name)
+        if word_offset == 0
+          @mem.set_alias(key, base_label)
+        else
+          offset_const = @mem.const(word_offset)
+          r = fvar(inst.result)
+          emit PAdd.new(offset_const, base_label, r, comment: "struct GEP #{inst.result} = #{base_name} + #{word_offset}")
+        end
+        mark_pointer(inst.result)
+        if field_type&.start_with?('%') && @struct_types[field_type[1..]]
+          @struct_gep_info[key] = { pointer: true, offset: 0, struct_name: field_type[1..] }
+        end
+      else
+        # Base is a local alloca'd struct (array)
+        element_label = @mem.func_array_element(@current_func, base_name, word_offset)
+        if element_label
+          @mem.set_alias(key, element_label)
+          if field_type&.start_with?('%') && @struct_types[field_type[1..]]
+            @struct_gep_info[key] = { base_array: base_name, offset: word_offset, struct_name: field_type[1..] }
+          end
+        else
+          fvar(inst.result)
+          emit PLabel.new("", comment: "struct GEP fallback: #{inst.raw}")
+        end
       end
     end
 
@@ -1356,6 +1448,27 @@ module S4C
 
     def is_pointer?(ir_name)
       @pointers["#{@current_func}::#{ir_name}"]
+    end
+
+    # Calculate the word size of a type (struct fields are counted recursively)
+    def type_word_size(type_str)
+      if type_str.start_with?('%')
+        name = type_str[1..]
+        fields = @struct_types[name]
+        return 1 unless fields
+        fields.sum { |f| type_word_size(f) }
+      elsif type_str =~ /^\[(\d+)\s*x\s*(.+)\]$/
+        $1.to_i * type_word_size($2.strip)
+      else
+        1  # i32, ptr, etc. are all 1 word
+      end
+    end
+
+    # Calculate the word offset of a struct field
+    def struct_field_offset(struct_name, field_idx)
+      fields = @struct_types[struct_name]
+      return 0 unless fields
+      fields[0...field_idx].sum { |f| type_word_size(f) }
     end
 
     def emit(op)
