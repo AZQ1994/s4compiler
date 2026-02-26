@@ -51,6 +51,7 @@ module S4C
         changed |= phi_coalescing
         changed |= arg_local_aliasing
         changed |= dead_store_elimination
+        changed |= local_dead_store_elimination
         changed |= liveness_push_pop_elimination
         changed |= push_pop_elimination
         compute_jump_targets if changed  # recompute for next iteration
@@ -152,11 +153,23 @@ module S4C
       changed = false
       result = []
       @ops.each_with_index do |op, i|
+        nxt = @ops[i + 1]
         if op.is_a?(PGoto)
-          nxt = @ops[i + 1]
           if nxt.is_a?(PLabel) && nxt.name == op.label
             changed = true
-            next # skip this PGoto
+            next # skip this PGoto — jumping to next instruction
+          end
+        elsif op.is_a?(PSubNeg)
+          if nxt.is_a?(PLabel) && nxt.name == op.label
+            # PSubNeg(a, b, NEXT) → branch target is next instruction → no-op
+            changed = true
+            next
+          end
+        elsif op.is_a?(PNeg)
+          if nxt.is_a?(PLabel) && nxt.name == op.label
+            # PNeg(v, NEXT) → branch target is next instruction → no-op
+            changed = true
+            next
           end
         end
         result << op
@@ -370,6 +383,23 @@ module S4C
             op
           end
 
+        when PSubNeg
+          va = const_map[op.a]
+          vb = const_map[op.b]
+          if va && vb
+            diff = vb - va  # result = b - a
+            if diff < 0
+              changed = true
+              PGoto.new(op.label, comment: "#{op.comment} [folded: #{vb}-#{va}=#{diff}<0 always]")
+            else
+              # Never taken → delete
+              changed = true
+              nil
+            end
+          else
+            op
+          end
+
         else
           op
         end
@@ -414,12 +444,24 @@ module S4C
           else
             op
           end
+        when PSubNeg
+          if zero_labels.include?(op.a)
+            # PSubNeg(ZERO, b, L) → test if b < 0 → PNeg(b, L)
+            changed = true
+            PNeg.new(op.b, op.label, comment: op.comment)
+          elsif op.a == op.b
+            # PSubNeg(x, x, L) → x - x = 0, never negative → delete
+            changed = true
+            nil
+          else
+            op
+          end
         else
           op
         end
       end
 
-      @ops = result
+      @ops = result.compact
       changed
     end
 
@@ -546,6 +588,9 @@ module S4C
       when PSub
         # Non-commutative: preserve order (c = b - a)
         "SUB:#{op.a}:#{op.b}"
+      when PCp
+        # Copy from same source → reuse
+        "CP:#{op.src}"
       else
         nil
       end
@@ -1313,6 +1358,54 @@ module S4C
       end
 
       @ops = result
+      changed
+    end
+
+    # ── Pass: LocalDeadStoreElimination ─────────────────────────────
+    # Within basic blocks, if a variable is written and then overwritten
+    # before being read, the first write is dead.
+    def local_dead_store_elimination
+      changed = false
+      result = []
+      # Track last write index for each variable within current block
+      last_write = {}  # var → index in result array
+      live_writes = Set.new  # indices that have been read (thus live)
+
+      @ops.each do |op|
+        # Block boundary: reset tracking
+        if op.is_a?(PLabel) || unconditional_transfer?(op) || op.is_a?(PSubNeg) ||
+           op.is_a?(PNeg) || op.is_a?(PIndirectLoadSubNeg)
+          last_write.clear
+          live_writes.clear
+          result << op
+          next
+        end
+
+        # Mark reads as live
+        reads(op).each do |v|
+          if last_write[v]
+            live_writes << last_write[v]
+          end
+        end
+
+        # Check writes: if previous write to same var exists and wasn't read, kill it
+        writes(op).each do |v|
+          if last_write[v] && !live_writes.include?(last_write[v]) && !protected_var?(v)
+            prev_idx = last_write[v]
+            # Only eliminate if previous write has no side effects
+            prev_op = result[prev_idx]
+            if prev_op.is_a?(PCp) || prev_op.is_a?(PSub) || prev_op.is_a?(PAdd)
+              result[prev_idx] = nil
+              changed = true
+            end
+          end
+          last_write[v] = result.length
+        end
+
+        result << op
+      end
+
+      @ops = result.compact if changed
       changed
     end
 
