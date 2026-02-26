@@ -930,23 +930,15 @@ module S4C
           next unless matching_push
           push_idx = matching_push[:idx]
 
-          # Check 1: used-after — scan forward from pop, is var read before written?
-          used_after = true  # conservative default
+          # Check 1: Is var read by any non-PPush instruction after the pop?
+          # Scan all instructions from pop to end of program (ignore control flow
+          # boundaries). Exclude PPush reads to break circular dependency — same
+          # technique used by push_pop_elimination.
+          used_after = false
           ((pop_idx + 1)...@ops.length).each do |j|
             op_j = @ops[j]
-            r = reads(op_j)
-            w = writes(op_j)
-            if r.include?(var)
-              used_after = true
-              break
-            end
-            if w.include?(var)
-              # Written before read → not needed
-              used_after = false
-              break
-            end
-            # Control flow boundary → conservatively keep
-            if op_j.is_a?(PLabel) || op_j.is_a?(PNeg) || op_j.is_a?(PSubNeg) || op_j.is_a?(PGoto)
+            next if op_j.is_a?(PPush)  # exclude PPush reads (break circular dep)
+            if reads(op_j).include?(var)
               used_after = true
               break
             end
@@ -960,6 +952,8 @@ module S4C
           end
 
           # Check 2: defined-before — scan backward from push to function entry
+          # Scan all instructions (ignoring intermediate PLabel/PGoto) until
+          # we reach the func_ entry label.
           defined_before = true  # conservative default
           found_func_entry = false
           (push_idx - 1).downto(0) do |j|
