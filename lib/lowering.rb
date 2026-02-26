@@ -92,6 +92,8 @@ module S4C
         when :and  then emit_and_subroutine
         when :or   then emit_or_subroutine
         when :xor  then emit_xor_subroutine
+        when :memset_loop then emit_memset_loop_subroutine
+        when :memcpy_loop then emit_memcpy_loop_subroutine
         end
       end
 
@@ -1325,47 +1327,76 @@ module S4C
       src_op = inst.operands[2]
       byte_count_op = inst.operands[3]
 
-      unless byte_count_op&.const?
-        emit PLabel.new("", comment: "UNSUPPORTED: memcpy with non-constant size")
-        return
-      end
-
-      word_count = byte_count_op.value / 4
       dst_name = dst_op.var? ? dst_op.value : nil
       src_name = src_op.var? ? src_op.value : nil
       dst_is_ptr = dst_name && is_pointer?(dst_name)
       src_is_ptr = src_name && is_pointer?(src_name)
 
-      if !dst_is_ptr && !src_is_ptr && dst_name && src_name
-        # Both are local alloca — direct word-by-word copy
-        word_count.times do |i|
-          src_elem = @mem.func_array_element(@current_func, src_name, i)
-          dst_elem = @mem.func_array_element(@current_func, dst_name, i)
-          if src_elem && dst_elem
-            emit PCp.new(dst_elem, src_elem, comment: "memcpy word #{i}")
+      if byte_count_op&.const?
+        # Constant size: compile-time unroll
+        word_count = byte_count_op.value / 4
+
+        if !dst_is_ptr && !src_is_ptr && dst_name && src_name
+          # Both are local alloca — direct word-by-word copy
+          word_count.times do |i|
+            src_elem = @mem.func_array_element(@current_func, src_name, i)
+            dst_elem = @mem.func_array_element(@current_func, dst_name, i)
+            if src_elem && dst_elem
+              emit PCp.new(dst_elem, src_elem, comment: "memcpy word #{i}")
+            end
+          end
+        else
+          # At least one is a pointer — use indirect load/store
+          dst_label = resolve_operand(dst_op)
+          src_label = resolve_operand(src_op)
+          word_count.times do |i|
+            id = @indirect_id += 1
+            if i > 0
+              offset_const = @mem.const(i)
+              src_addr = @mem.temp
+              dst_addr = @mem.temp
+              emit PAdd.new(offset_const, src_label, src_addr, comment: "memcpy src addr + #{i}")
+              emit PAdd.new(offset_const, dst_label, dst_addr, comment: "memcpy dst addr + #{i}")
+              temp = @mem.temp
+              emit PIndirectLoad.new(temp, src_addr, "mc_r#{id}", comment: "memcpy load word #{i}")
+              emit PIndirectStore.new(dst_addr, temp, "mc_w#{id}", comment: "memcpy store word #{i}")
+            else
+              temp = @mem.temp
+              emit PIndirectLoad.new(temp, src_label, "mc_r#{id}", comment: "memcpy load word 0")
+              emit PIndirectStore.new(dst_label, temp, "mc_w#{id}", comment: "memcpy store word 0")
+            end
           end
         end
       else
-        # At least one is a pointer — use indirect load/store
+        # Variable size: use memcpy_loop subroutine
+        ensure_memcpy_loop_subroutine
+        mc = @builtins[:memcpy_loop]
+
         dst_label = resolve_operand(dst_op)
-        src_label = resolve_operand(src_op)
-        word_count.times do |i|
-          id = @indirect_id += 1
-          if i > 0
-            offset_const = @mem.const(i)
-            src_addr = @mem.temp
-            dst_addr = @mem.temp
-            emit PAdd.new(offset_const, src_label, src_addr, comment: "memcpy src addr + #{i}")
-            emit PAdd.new(offset_const, dst_label, dst_addr, comment: "memcpy dst addr + #{i}")
-            temp = @mem.temp
-            emit PIndirectLoad.new(temp, src_addr, "mc_r#{id}", comment: "memcpy load word #{i}")
-            emit PIndirectStore.new(dst_addr, temp, "mc_w#{id}", comment: "memcpy store word #{i}")
-          else
-            temp = @mem.temp
-            emit PIndirectLoad.new(temp, src_label, "mc_r#{id}", comment: "memcpy load word 0")
-            emit PIndirectStore.new(dst_label, temp, "mc_w#{id}", comment: "memcpy store word 0")
-          end
+        if dst_is_ptr
+          emit PCp.new(mc[:dst], dst_label, comment: "memcpy_loop dst = ptr")
+        else
+          addr_temp = @mem.temp
+          @mem.mark_addr_of(addr_temp, dst_label)
+          emit PCp.new(mc[:dst], addr_temp, comment: "memcpy_loop dst = &#{dst_name}")
         end
+
+        src_label = resolve_operand(src_op)
+        if src_is_ptr
+          emit PCp.new(mc[:src], src_label, comment: "memcpy_loop src = ptr")
+        else
+          addr_temp = @mem.temp
+          @mem.mark_addr_of(addr_temp, src_label)
+          emit PCp.new(mc[:src], addr_temp, comment: "memcpy_loop src = &#{src_name}")
+        end
+
+        emit PCp.new(mc[:byte_count], resolve_operand(byte_count_op), comment: "memcpy_loop byte_count")
+
+        @call_id += 1
+        ret_label = @mem.alloc_label("#{@current_func}_mcloop_ret_#{@call_id}")
+        emit PCallSetReturn.new(mc[:ret_d], ret_label, comment: "memcpy_loop return addr")
+        emit PGoto.new("__memcpy_loop", comment: "call __memcpy_loop")
+        emit PLabel.new(ret_label, comment: "return from __memcpy_loop")
       end
     end
 
@@ -1376,16 +1407,11 @@ module S4C
       byte_val_op = inst.operands[2]
       byte_count_op = inst.operands[3]
 
-      unless byte_count_op&.const?
-        emit PLabel.new("", comment: "UNSUPPORTED: memset with non-constant size")
-        return
-      end
       unless byte_val_op&.const?
         emit PLabel.new("", comment: "UNSUPPORTED: memset with non-constant value")
         return
       end
 
-      word_count = byte_count_op.value / 4
       byte_val = byte_val_op.value
       word_val = if byte_val == 0
                    0
@@ -1397,29 +1423,130 @@ module S4C
       dst_name = dst_op.var? ? dst_op.value : nil
       dst_is_ptr = dst_name && is_pointer?(dst_name)
 
-      if !dst_is_ptr && dst_name
-        # Local alloca — direct word-by-word set
-        word_count.times do |i|
-          dst_elem = @mem.func_array_element(@current_func, dst_name, i)
-          if dst_elem
-            emit PCp.new(dst_elem, const_word_val, comment: "memset word #{i}")
+      if byte_count_op&.const?
+        # Constant size: compile-time unroll
+        word_count = byte_count_op.value / 4
+
+        if !dst_is_ptr && dst_name
+          # Local alloca — direct word-by-word set
+          word_count.times do |i|
+            dst_elem = @mem.func_array_element(@current_func, dst_name, i)
+            if dst_elem
+              emit PCp.new(dst_elem, const_word_val, comment: "memset word #{i}")
+            end
+          end
+        else
+          # Pointer — use indirect store
+          dst_label = resolve_operand(dst_op)
+          word_count.times do |i|
+            id = @indirect_id += 1
+            if i > 0
+              offset_const = @mem.const(i)
+              dst_addr = @mem.temp
+              emit PAdd.new(offset_const, dst_label, dst_addr, comment: "memset dst addr + #{i}")
+              emit PIndirectStore.new(dst_addr, const_word_val, "ms_w#{id}", comment: "memset store word #{i}")
+            else
+              emit PIndirectStore.new(dst_label, const_word_val, "ms_w#{id}", comment: "memset store word 0")
+            end
           end
         end
       else
-        # Pointer — use indirect store
+        # Variable size: use memset_loop subroutine
+        ensure_memset_loop_subroutine
+        ms = @builtins[:memset_loop]
+
         dst_label = resolve_operand(dst_op)
-        word_count.times do |i|
-          id = @indirect_id += 1
-          if i > 0
-            offset_const = @mem.const(i)
-            dst_addr = @mem.temp
-            emit PAdd.new(offset_const, dst_label, dst_addr, comment: "memset dst addr + #{i}")
-            emit PIndirectStore.new(dst_addr, const_word_val, "ms_w#{id}", comment: "memset store word #{i}")
-          else
-            emit PIndirectStore.new(dst_label, const_word_val, "ms_w#{id}", comment: "memset store word 0")
-          end
+        if dst_is_ptr
+          emit PCp.new(ms[:dst], dst_label, comment: "memset_loop dst = ptr")
+        else
+          addr_temp = @mem.temp
+          @mem.mark_addr_of(addr_temp, dst_label)
+          emit PCp.new(ms[:dst], addr_temp, comment: "memset_loop dst = &#{dst_name}")
         end
+
+        emit PCp.new(ms[:val], const_word_val, comment: "memset_loop val = #{word_val}")
+        emit PCp.new(ms[:byte_count], resolve_operand(byte_count_op), comment: "memset_loop byte_count")
+
+        @call_id += 1
+        ret_label = @mem.alloc_label("#{@current_func}_msloop_ret_#{@call_id}")
+        emit PCallSetReturn.new(ms[:ret_d], ret_label, comment: "memset_loop return addr")
+        emit PGoto.new("__memset_loop", comment: "call __memset_loop")
+        emit PLabel.new(ret_label, comment: "return from __memset_loop")
       end
+    end
+
+    def ensure_memset_loop_subroutine
+      return if @builtins[:memset_loop]
+      dst        = @mem.func_var("__memset_loop", "dst")
+      val        = @mem.func_var("__memset_loop", "val")
+      byte_count = @mem.func_var("__memset_loop", "byte_count")
+      ret_d      = "__memset_loop_ret_d"
+      @builtins[:memset_loop] = { dst: dst, val: val, byte_count: byte_count, ret_d: ret_d }
+      @deferred_subroutines << :memset_loop
+    end
+
+    def emit_memset_loop_subroutine
+      ms  = @builtins[:memset_loop]
+      dst = ms[:dst]
+      val = ms[:val]
+      bc  = ms[:byte_count]
+      z   = @mem.zero
+      four = @mem.const(4)
+      c_n1 = @mem.const(-1)
+      t   = @mem.temp
+
+      emit PLabel.new("__memset_loop", comment: "built-in: memset loop")
+      # Check: byte_count > 0?
+      emit PSub.new(bc, z, t, comment: "t = -byte_count")
+      emit PNeg.new(t, "__memset_loop_body", comment: "if byte_count > 0 → body")
+      emit PGoto.new("__memset_loop_done", comment: "byte_count <= 0 → done")
+      emit PLabel.new("__memset_loop_body")
+      id = @indirect_id += 1
+      emit PIndirectStore.new(dst, val, "msl_w#{id}", comment: "memset_loop: [dst] = val")
+      emit PSub.new(c_n1, dst, dst, comment: "dst += 1")
+      emit PSub.new(four, bc, bc, comment: "byte_count -= 4")
+      emit PGoto.new("__memset_loop", comment: "repeat")
+      emit PLabel.new("__memset_loop_done")
+      emit PReturnJump.new(ms[:ret_d], comment: "return from __memset_loop")
+    end
+
+    def ensure_memcpy_loop_subroutine
+      return if @builtins[:memcpy_loop]
+      dst        = @mem.func_var("__memcpy_loop", "dst")
+      src        = @mem.func_var("__memcpy_loop", "src")
+      byte_count = @mem.func_var("__memcpy_loop", "byte_count")
+      ret_d      = "__memcpy_loop_ret_d"
+      @builtins[:memcpy_loop] = { dst: dst, src: src, byte_count: byte_count, ret_d: ret_d }
+      @deferred_subroutines << :memcpy_loop
+    end
+
+    def emit_memcpy_loop_subroutine
+      mc  = @builtins[:memcpy_loop]
+      dst = mc[:dst]
+      src = mc[:src]
+      bc  = mc[:byte_count]
+      z   = @mem.zero
+      four = @mem.const(4)
+      c_n1 = @mem.const(-1)
+      t   = @mem.temp
+      temp = @mem.func_var("__memcpy_loop", "temp")
+
+      emit PLabel.new("__memcpy_loop", comment: "built-in: memcpy loop")
+      # Check: byte_count > 0?
+      emit PSub.new(bc, z, t, comment: "t = -byte_count")
+      emit PNeg.new(t, "__memcpy_loop_body", comment: "if byte_count > 0 → body")
+      emit PGoto.new("__memcpy_loop_done", comment: "byte_count <= 0 → done")
+      emit PLabel.new("__memcpy_loop_body")
+      id = @indirect_id += 1
+      emit PIndirectLoad.new(temp, src, "mcl_r#{id}", comment: "memcpy_loop: temp = [src]")
+      id = @indirect_id += 1
+      emit PIndirectStore.new(dst, temp, "mcl_w#{id}", comment: "memcpy_loop: [dst] = temp")
+      emit PSub.new(c_n1, src, src, comment: "src += 1")
+      emit PSub.new(c_n1, dst, dst, comment: "dst += 1")
+      emit PSub.new(four, bc, bc, comment: "byte_count -= 4")
+      emit PGoto.new("__memcpy_loop", comment: "repeat")
+      emit PLabel.new("__memcpy_loop_done")
+      emit PReturnJump.new(mc[:ret_d], comment: "return from __memcpy_loop")
     end
 
     # Indirect call via function pointer: dispatch table approach
@@ -1443,9 +1570,9 @@ module S4C
       call_id = @call_id
       icall_done_label = @mem.alloc_label("#{@current_func}_icall_done_#{call_id}")
 
-      # Save caller state (once)
+      # Save caller state (once); deduplicate to avoid stack imbalance from GEP aliases
       caller_info = @functions[@current_func]
-      save_labels = @mem.func_all_labels(@current_func)
+      save_labels = @mem.func_all_labels(@current_func).uniq
       save_labels = save_labels + [caller_info[:ret_d_label]] if caller_info && @current_func != 'main'
 
       save_labels.each_with_index do |label, i|
@@ -1542,6 +1669,11 @@ module S4C
         return
       end
 
+      # Skip llvm.lifetime intrinsics (no-op for our architecture)
+      if func_name.start_with?('llvm.lifetime')
+        return
+      end
+
       args = inst.operands[1..]
       callee = @functions[func_name]
 
@@ -1558,8 +1690,9 @@ module S4C
       @mem.alloc_label(ret_label)
 
       # Save current function's state onto the stack (for recursion safety)
+      # Deduplicate to avoid stack imbalance from GEP aliases
       caller_info = @functions[@current_func]
-      save_labels = @mem.func_all_labels(@current_func)
+      save_labels = @mem.func_all_labels(@current_func).uniq
       # Also save the return address cell (lives in code section, but addressable)
       save_labels = save_labels + [caller_info[:ret_d_label]] if caller_info && @current_func != 'main'
 
