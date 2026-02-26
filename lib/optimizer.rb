@@ -40,6 +40,7 @@ module S4C
         changed |= cmp_branch_fusion
         changed |= local_value_numbering
         changed |= loop_invariant_code_motion
+        changed |= loop_rotation
         changed |= write_destination_forwarding
         changed |= copy_propagation
         changed |= phi_coalescing
@@ -527,6 +528,16 @@ module S4C
         end
       end
 
+      # Also detect conditional back-edges (PSubNeg/PNeg branching to an earlier label).
+      # These arise from rotated loops where the back-edge is a conditional branch.
+      cond_back_edges = []
+      @ops.each_with_index do |op, i|
+        next unless op.is_a?(PSubNeg) || op.is_a?(PNeg)
+        target = label_positions[op.label]
+        next unless target && target < i
+        cond_back_edges << { header: target, tail: i }
+      end
+
       return false if back_edges.empty?
 
       # Sort by header position descending (process inner loops first)
@@ -587,6 +598,18 @@ module S4C
 
         next if hoistable.empty?
 
+        # Safety: don't hoist if the insert position (just before header) falls
+        # inside another loop's body. This can happen with rotated loops where
+        # the code before the header is an inner loop body.
+        inside_other = cond_back_edges.any? do |cb|
+          cb[:header] < header_idx && header_idx <= cb[:tail]
+        end
+        inside_other ||= back_edges.any? do |other|
+          next false if other[:header] == header_idx && other[:tail] == tail_idx
+          other[:header] < header_idx && header_idx <= other[:tail]
+        end
+        next if inside_other
+
         # Hoist: move ops to just before the header
         hoisted_ops = hoistable.map { |i| @ops[i] }
         hoistable.sort.reverse.each { |i| @ops.delete_at(i) }
@@ -601,6 +624,125 @@ module S4C
       end
 
       changed
+    end
+
+    # ── Pass: LoopRotation ─────────────────────────────────────────
+    # Convert header-tested loops to tail-tested, eliminating the
+    # back-edge PGoto.  Pattern:
+    #   L_header: [test ops] PSubNeg/PNeg → L_body; PGoto L_exit
+    #   L_body:   [body ops] PGoto L_header
+    # Becomes:
+    #   PGoto L_header;  L_body: [body ops]  L_header: [test ops] PSubNeg/PNeg → L_body
+    # Saves 1 PGoto (1 SUBNEG4) per iteration.
+
+    def loop_rotation
+      label_pos = {}
+      @ops.each_with_index { |op, i| label_pos[op.name] = i if op.is_a?(PLabel) }
+
+      # Find back-edges and verify the rotation pattern
+      rotations = []
+      @ops.each_with_index do |op, i|
+        next unless op.is_a?(PGoto)
+        header_idx = label_pos[op.label]
+        next unless header_idx && header_idx < i  # back-edge
+
+        info = detect_rotatable_loop(header_idx, i)
+        rotations << info if info
+      end
+
+      return false if rotations.empty?
+
+      # Remove overlapping rotations (keep first)
+      rotations.sort_by! { |r| r[:header_idx] }
+      filtered = [rotations[0]]
+      rotations[1..].each do |r|
+        filtered << r if r[:header_idx] > filtered.last[:backedge_idx]
+      end
+
+      # Build new ops array
+      result = []
+      skip_ranges = {}
+      filtered.each { |r| (r[:header_idx]..r[:backedge_idx]).each { |j| skip_ranges[j] = r } }
+
+      i = 0
+      while i < @ops.length
+        rot = skip_ranges[i]
+        if rot && i == rot[:header_idx]
+          # Emit rotated loop
+          result << PGoto.new(rot[:header_label], comment: "loop rotation entry")
+          result << PLabel.new(rot[:body_label], comment: @ops[rot[:body_label_idx]].comment)
+          rot[:body_range].each { |j| result << @ops[j] }
+          result << PLabel.new(rot[:header_label], comment: @ops[rot[:header_idx]].comment)
+          rot[:test_range].each { |j| result << @ops[j] }
+          result << @ops[rot[:cond_idx]]
+          i = rot[:backedge_idx] + 1
+        elsif skip_ranges[i]
+          i += 1  # inside a rotated range, skip
+        else
+          result << @ops[i]
+          i += 1
+        end
+      end
+
+      @ops = result
+      true
+    end
+
+    def detect_rotatable_loop(header_idx, backedge_idx)
+      header_label = @ops[header_idx].name
+
+      # Scan test ops: header+1 until we find PSubNeg or PNeg
+      cond_idx = nil
+      ((header_idx + 1)..backedge_idx).each do |j|
+        op = @ops[j]
+        if op.is_a?(PSubNeg) || op.is_a?(PNeg)
+          cond_idx = j
+          break
+        end
+        # Test ops must be simple (no labels, gotos, branches)
+        return nil if op.is_a?(PLabel) || op.is_a?(PGoto) || op.is_a?(PHalt)
+      end
+      return nil unless cond_idx
+
+      # Next must be PGoto L_exit
+      exit_idx = cond_idx + 1
+      return nil unless exit_idx < @ops.length && @ops[exit_idx].is_a?(PGoto)
+      exit_label = @ops[exit_idx].label
+
+      # Next must be PLabel L_body (conditional branch target)
+      body_label_idx = exit_idx + 1
+      return nil unless body_label_idx < @ops.length && @ops[body_label_idx].is_a?(PLabel)
+      body_label = @ops[body_label_idx].name
+
+      # Conditional branch must target L_body
+      cond_target = @ops[cond_idx].label
+      return nil unless cond_target == body_label
+
+      # Body ops: body_label_idx+1 to backedge_idx-1 (must be simple)
+      ((body_label_idx + 1)...backedge_idx).each do |j|
+        op = @ops[j]
+        return nil if op.is_a?(PLabel) || op.is_a?(PGoto) || op.is_a?(PNeg) ||
+                       op.is_a?(PSubNeg) || op.is_a?(PHalt)
+      end
+
+      # Back-edge must jump to header
+      return nil unless @ops[backedge_idx].label == header_label
+
+      # After back-edge must be L_exit (for fall-through to work)
+      after_idx = backedge_idx + 1
+      return nil unless after_idx < @ops.length && @ops[after_idx].is_a?(PLabel)
+      return nil unless @ops[after_idx].name == exit_label
+
+      {
+        header_idx: header_idx,
+        header_label: header_label,
+        cond_idx: cond_idx,
+        body_label_idx: body_label_idx,
+        body_label: body_label,
+        backedge_idx: backedge_idx,
+        test_range: ((header_idx + 1)...cond_idx).to_a,
+        body_range: ((body_label_idx + 1)...backedge_idx).to_a,
+      }
     end
 
     # ── Pass: WriteDestinationForwarding ─────────────────────────────
