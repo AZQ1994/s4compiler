@@ -508,4 +508,12 @@ class TestE2E < Minitest::Test
     refute result[:error], "No error expected: #{result[:error]}"
     assert_equal 92, sim.read_label('main___retval')
   end
+
+  def test_knapsack
+    # 0/1 Knapsack DP: 6 items, capacity 15 → optimal value 54
+    sim, result, _ = compile_and_run(fixture('knapsack.ll'), max_cycles: 10_000_000)
+    assert result[:halted], "Program should halt"
+    refute result[:error], "No error expected: #{result[:error]}"
+    assert_equal 54, sim.read_label('main___retval')
+  end
 end
